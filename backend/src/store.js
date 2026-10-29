@@ -5,7 +5,7 @@ import { demoSite, demoMembers, demoProjects, demoAchievements } from './demoDat
 const clone = (v) => JSON.parse(JSON.stringify(v));
 let demo = null;
 function demoStore() {
-  if (!demo) demo = { site: clone(demoSite), members: clone(demoMembers), projects: clone(demoProjects), achievements: clone(demoAchievements), messages: [], roles: [], audit: [] };
+  if (!demo) demo = { site: clone(demoSite), members: clone(demoMembers), projects: clone(demoProjects), achievements: clone(demoAchievements), messages: [], roles: [], audit: [], revisions: [] };
   return demo;
 }
 export function isFirebase() { return firebaseEnabled(); }
@@ -41,4 +41,36 @@ export const store = {
   async roleByEmail(email) { const all = await this.rolesAll(); return all.find((r) => r.email === email) || null; },
   async saveRole(uid, v) { if (isFirebase()) { await db().collection('user_roles').doc(uid).set({ ...v, uid }, { merge: true }); return { id: uid, ...v }; } const d = demoStore(); const ex = d.roles.find((r) => r.id === uid); if (ex) Object.assign(ex, v); else { const row = { id: uid, uid, ...v }; d.roles.push(row); return row; } return ex; },
   async addAudit(row) { if (isFirebase()) { await db().collection('audit_log').add(row); return; } demoStore().audit.push(row); },
+  async auditAll(limit = 50, offset = 0) {
+    if (isFirebase()) { const s = await db().collection('audit_log').orderBy('created_at', 'desc').limit(limit + offset).get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })).slice(offset, offset + limit); }
+    return [...demoStore().audit].reverse().slice(offset, offset + limit);
+  },
+  async addRevision(row) {
+    // Deep-clone: the demo store mutates records in place, so a snapshot
+    // stored by reference would silently become the post-edit state.
+    const cloned = JSON.parse(JSON.stringify(row));
+    if (isFirebase()) { const ref = await db().collection('content_revisions').add(cloned); return { id: ref.id, ...cloned }; }
+    const r = { id: `rev-${Date.now()}-${demoStore().revisions.length}`, ...cloned }; demoStore().revisions.push(r); return r;
+  },
+  async revisionsAll(entity, entity_id) {
+    if (isFirebase()) {
+      let q = db().collection('content_revisions').orderBy('created_at', 'desc');
+      if (entity) q = q.where('entity', '==', entity);
+      if (entity_id) q = q.where('entity_id', '==', entity_id);
+      const s = await q.limit(100).get(); return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+    return [...demoStore().revisions].reverse().filter((r) => (!entity || r.entity === entity) && (!entity_id || r.entity_id === entity_id));
+  },
+  async revisionById(id) {
+    if (isFirebase()) { const s = await db().collection('content_revisions').doc(id).get(); return s.exists ? { id: s.id, ...s.data() } : null; }
+    return demoStore().revisions.find((r) => r.id === id) || null;
+  },
+  async markMessage(id, read) {
+    if (isFirebase()) { await db().collection('contact_messages').doc(id).set({ read }, { merge: true }); return; }
+    const m = demoStore().messages.find((x) => x.id === id); if (m) m.read = read;
+  },
+  async deleteMessage(id) {
+    if (isFirebase()) { await db().collection('contact_messages').doc(id).delete(); return; }
+    demoStore().messages = demoStore().messages.filter((x) => x.id !== id);
+  },
 };

@@ -1,8 +1,10 @@
-# AICT Group Portfolio — Foundation (local only)
+# AICT Group Portfolio
 
 A long-term team portfolio for the AICT group: homepage, team profiles,
-projects, achievements, contact, and an admin dashboard. **No build in this
-repo has been pushed, deployed, or connected to a live account.**
+projects, achievements, contact, and an admin dashboard. **Status: the
+foundation was pushed to GitHub (`mbakhtawar2007/aictPortfolio`, `main` @
+`90a524b93c68497ed76e518240647b2d2360cb0b`). Nothing is deployed yet —
+Vercel and Netlify are still pending, and no live sign-in has been tested.**
 
 ## Approved architecture (supersedes spec v2's Supabase + Vercel-only plan)
 
@@ -23,13 +25,53 @@ card) since February 2026, so files use Cloudinary free (no card) instead.
 
 ## What is NOT done yet
 
-- No Firebase, Cloudinary, Netlify, Vercel or Resend account has been created.
+- Firebase (project `aict-group-portfolio`, Firestore, Email/Password Auth)
+  and a Cloudinary free account were created by the site owner; the values
+  were never shared in chat or committed here.
+- Vercel and Netlify are still pending — nothing is deployed yet.
 - No real member, project or achievement content exists. The backend demo
   data is labelled SAMPLE everywhere and must never be presented as real.
-- No full admin create/edit forms, media library, revision-restore UI, or
-  invite form UI yet — the APIs for those are implemented; the forms are a
-  next pass.
-- No live sign-in has been tested (that needs the user's Firebase project).
+- Admin create/edit forms, users/invites UI, messages inbox, media library,
+  audit and revision-restore UI are now built in this pass (see below);
+  full admin forms still depend on the APIs listed in "Admin UI" below.
+- No live sign-in has been tested (that needs Vercel + Netlify wired to
+  the owner's Firebase project).
+- Group name, logo and brand are still open decisions — the UI stays
+  generic ("AICT Group") and uses initials avatars / a placeholder SVG
+  only. No logo or real member photo has been invented.
+
+## Admin UI (this pass)
+
+- `/admin` tabs: Overview, Members, Projects, Achievements, Users,
+  Messages, Media, Audit, Settings. Forms validate field-by-field,
+  preserve input on recoverable errors, disable submit while in flight,
+  confirm deletes, and surface 401/403 as permission-denied states.
+- Members: full profile fields plus skills, education, experience and
+  links editors (all supported by `POST/PATCH /api/admin/members`).
+  Achievements are a separate collection, edited on the Achievements tab
+  with a member selector.
+- Projects: all fields plus assigned members with a per-member role
+  (`project_members`, stored alongside `member_ids`; the backend schema
+  was extended for this — see `backend/src/validate.js`).
+- Site settings: all fields in `GET/PATCH /api/admin/settings`, plus
+  `accent_color`, `social_links`, `seo_title`, `seo_description` and
+  `og_image_url` (added to the site schema in this pass; unknown fields
+  were previously stripped by Zod, so the UI could not have saved them).
+- Users: invite (member default; admin requires a deliberate
+  confirmation), list, resend, revoke, deactivate/reactivate via
+  `PATCH /api/admin/users/:id`.
+- Messages: admin-only list, mark read/unread, delete with confirmation,
+  reply by `mailto:` link.
+- Media: `GET /api/admin/media` lists Cloudinary resources when
+  configured (503 fail-closed otherwise); uploads are signed by
+  `POST /api/admin/upload/sign` and posted directly to Cloudinary.
+- Audit: `GET /api/admin/audit` (admin-only, paginated). Revisions are
+  snapshotted on every member/project/achievement update and can be
+  restored from `POST /api/admin/revisions/:id/restore` (admin-only).
+  Site-settings revisions are not snapshotted — documented gap.
+- Publish truthfulness: saving sets content in the database; the live
+  static site updates only after a Netlify rebuild. The revalidate
+  endpoint returns `saved_refresh_pending` and the UI says so.
 
 ## Run locally
 

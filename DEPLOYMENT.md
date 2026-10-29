@@ -1,7 +1,11 @@
 # Deployment — steps the USER must do by hand
 
-Nothing below has been done by the assistant. No account was created, no
-site was deployed, and no secret was entered anywhere in this repo.
+Status update: the foundation (plus the full UI/UX pass) has been pushed
+to GitHub (`mbakhtawar2007/aictPortfolio`). Nothing below has been
+deployed yet — no Vercel or Netlify site is live, and no secret was
+entered anywhere in this repo. Firebase and Cloudinary accounts were
+created by the site owner (values kept by the owner, never in chat or
+in this repo).
 
 ## 1. Firebase (data + Auth) — user creates the project
 

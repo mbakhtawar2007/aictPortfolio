@@ -1,18 +1,18 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import '../styles/globals.css';
+import { Navbar, Footer, BackToTop } from '../components/layout';
 export const metadata: Metadata = { title: 'AICT Group Portfolio', description: 'The AICT group: who we are, what we build, and what we have achieved.' };
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('aict_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(localStorage.getItem('aict_reduce')==='true'){document.documentElement.setAttribute('data-reduce','true');}}catch(e){}})();`;
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en"><body>
-      <nav className="nav">
-        <a className="brand" href="/">AICT</a>
-        <a href="/">Home</a><a href="/team">Team</a><a href="/projects">Projects</a>
-        <a href="/achievements">Achievements</a><a href="/contact">Contact</a>
-        <span style={{ marginLeft: 'auto' }}><a href="/admin/login">Admin</a></span>
-      </nav>
+      <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      <Navbar />
       <main>{children}</main>
-      <footer>AICT Group Portfolio — content is managed through the admin dashboard. No public sign-up: accounts are created by an admin only.</footer>
+      <Footer />
+      <BackToTop />
+      <a className="mobile-contact-fab" href="/contact" aria-label="Contact the group">Contact</a>
     </body></html>
   );
 }

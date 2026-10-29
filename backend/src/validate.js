@@ -41,6 +41,7 @@ export const projectSchema = z.object({
   case_study: z.string().max(20000).optional().default(''),
   category: z.enum(['AI Video', 'AI Tool', 'Website', 'Other']).optional().default('Other'),
   tech_stack: z.array(z.string()).optional().default([]), tools_used: z.array(z.string()).optional().default([]),
+  project_members: z.array(z.object({ member_id: z.string().min(1), role_in_project: z.string().optional().default('') })).optional().default([]),
   cover_url: z.string().max(1000).optional().default(''), video_url: z.string().max(1000).optional().default(''),
   repo_url: z.string().url().optional().or(z.literal('')).default(''), live_url: z.string().url().optional().or(z.literal('')).default(''),
   year: z.number().int().min(2000).max(2100).optional(), featured: z.boolean().optional().default(false),
@@ -60,7 +61,12 @@ export const siteSchema = z.object({
   mission: z.string().max(5000).optional().default(''), about: z.string().max(10000).optional().default(''),
   logo_url: z.string().max(1000).optional().default(''), hero_video_url: z.string().max(1000).optional().default(''),
   email: z.string().email().optional().or(z.literal('')).default(''),
+  accent_color: z.string().max(50).optional().default(''),
+  social_links: z.object({ github: z.string().optional().default(''), linkedin: z.string().optional().default(''), youtube: z.string().optional().default(''), x: z.string().optional().default(''), instagram: z.string().optional().default('') }).partial().optional().default({}),
+  seo_title: z.string().max(300).optional().default(''), seo_description: z.string().max(500).optional().default(''),
+  og_image_url: z.string().max(1000).optional().default(''),
 });
+export const messagePatchSchema = z.object({ read: z.boolean() });
 export const contactSchema = z.object({
   name: z.string().min(1).max(200), email: z.string().email(),
   subject: z.string().max(300).optional().default(''), message: z.string().min(1).max(5000),

@@ -1,0 +1,6 @@
+# Netlify: publish the Next.js static export. No SPA fallback rewrite:
+# real routes (/team, /projects/...) exist as files in out/ thanks to
+# trailing static export pages. A catch-all SPA rewrite would mask 404s.
+[build]
+  command = "npm run build"
+  publish = "out"

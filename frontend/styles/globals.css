@@ -1,0 +1,31 @@
+/* Neural Studio, dark-first. Plain CSS in this foundation (no Tailwind yet)
+   to keep the static-export build reliable; tokens match spec section 6.
+   Google Fonts are a runtime @import with system fallbacks — if the font
+   fetch fails, the page still renders and the build does not fail. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap');
+:root { --bg: #070B16; --surface: rgba(255,255,255,0.05); --border: rgba(255,255,255,0.10); --text: #EDF1FA; --muted: #9AA6BF; --blue: #3B82F6; --violet: #8B5CF6; --cyan: #06B6D4; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; line-height: 1.6; }
+h1, h2, h3 { font-family: 'Space Grotesk', Sora, system-ui, sans-serif; line-height: 1.2; }
+a { color: #7dd3fc; }
+.nav { display: flex; gap: 16px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); background: rgba(7,11,22,0.9); position: sticky; top: 0; z-index: 10; }
+.nav a { color: var(--text); text-decoration: none; }
+.brand { font-weight: 700; background: linear-gradient(90deg, var(--blue), var(--violet), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+.hero { padding: 48px 0 24px; }
+.hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin: 0 0 12px; }
+.hero p { color: var(--muted); max-width: 680px; }
+.btn { display: inline-block; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--border); background: linear-gradient(90deg, var(--blue), var(--violet)); color: #fff; text-decoration: none; cursor: pointer; font-size: 15px; }
+.btn.secondary { background: transparent; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; backdrop-filter: blur(14px); }
+.chip { display: inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; margin: 2px 4px 2px 0; }
+.sample { display: inline-block; background: #f59e0b; color: #111; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
+.muted { color: var(--muted); }
+input, textarea, select { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: var(--text); font: inherit; margin: 6px 0 14px; }
+label { font-size: 14px; color: var(--muted); }
+footer { border-top: 1px solid var(--border); padding: 20px; text-align: center; color: var(--muted); font-size: 14px; }
+.error { border: 1px solid #f87171; border-radius: 12px; padding: 12px; color: #fecaca; }
+.success { border: 1px solid #34d399; border-radius: 12px; padding: 12px; color: #d1fae5; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@media (max-width: 640px) { .nav { flex-wrap: wrap; } main { padding: 20px 14px 48px; } }

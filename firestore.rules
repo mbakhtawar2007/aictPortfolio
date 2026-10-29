@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  // DENY ALL BY DEFAULT.
+  // Production reads/writes go through the Vercel backend (backend/src/*)
+  // using the Firebase Admin SDK, which bypasses these rules.
+  // The browser client SDK is used ONLY for Firebase Auth sign-in
+  // (signInWithEmailAndPassword for existing accounts). It must NOT
+  // read or write Firestore directly, so no collection is opened here.
+  // If a future feature needs direct client access, add an explicit,
+  // per-collection rule and a negative test for it — never open all.
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

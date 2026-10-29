@@ -1,0 +1,14 @@
+# Secrets and local env — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+# Dependencies and build output
+node_modules/
+frontend/.next/
+frontend/out/
+backend/dist/
+# Logs
+*.log
+.DS_Store

@@ -6,6 +6,7 @@ import { Field, Modal } from './ui';
 
 type AnyObj = Record<string, unknown>;
 function errText(v: unknown): string { return typeof v === 'string' ? v : ''; }
+function slugify(v: string): string { return v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 function Text({ label, value, onChange, type = 'text', error, placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; error?: string; placeholder?: string }) {
   return (<Field label={label} error={error}><input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></Field>);
 }
@@ -29,11 +30,11 @@ async function saveForm(path: string, method: string, body: unknown, push: (k: '
   const r = await apiSend(path, method, body, true);
   setBusy(false);
   if (r.error) { push('error', r.error.message); return false; }
-  push('success', 'Saved. Live static site updates only after a Netlify rebuild (saved_refresh_pending).');
+  push('success', 'Saved. To make it live, rebuild the site in Netlify (Deploys → Trigger deploy).');
   onSaved(); return true;
 }
 
-export function MemberForm({ initial, onSaved, onCancel, push }: { initial: Partial<Member> | null; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void }) {
+export function MemberForm({ initial, onSaved, onCancel, push, selfCreate }: { initial: Partial<Member> | null; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void; selfCreate?: boolean }) {
   const [f, setF] = useState<AnyObj>({ slug: '', full_name: '', role_title: '', short_intro: '', bio: '', photo_url: '', cover_url: '', location: '', availability: '', resume_path: '', resume_is_public: false, contact_email: '', contact_email_is_public: false, status: 'draft', sort_order: 0, skills: [], education: [], experience: [], links: [], ...(initial || {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
@@ -47,21 +48,26 @@ export function MemberForm({ initial, onSaved, onCancel, push }: { initial: Part
     await saveForm(initial?.id ? `/admin/members/${initial.id}` : '/admin/members', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
   return (<form onSubmit={submit}>
-    <Text label="Full name *" value={errText(f.full_name)} onChange={(v) => set('full_name', v)} error={errors.full_name} />
-    <Text label="Slug * (URL, e.g. ayesha-khan)" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} />
-    <Text label="Role title" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} />
+    {selfCreate && <p className="muted">You are creating your own profile. It will be saved as a draft, and an admin will review and publish it. You do not need to fill everything — name and web address are enough to start.</p>}
+    <section className="form-section"><h3>Basics</h3><p className="muted">Only name and web address are required. Everything else can be added later.</p>
+    <Text label="Full name *" value={errText(f.full_name)} onChange={(v) => { set('full_name', v); if (!errText(f.slug)) set('slug', slugify(v)); }} error={errors.full_name} />
+    <Text label="Web address (slug) *" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} placeholder="e.g. ayesha-khan — this becomes /team/ayesha-khan" />
+    <Text label="Role title" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} placeholder="e.g. AI Developer" />
     <Text label="Short intro" value={errText(f.short_intro)} onChange={(v) => set('short_intro', v)} />
     <Area label="Bio" value={errText(f.bio)} onChange={(v) => set('bio', v)} rows={6} />
-    <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a Cloudinary URL from the Media tab" />
+    {!selfCreate && <><Select label="Visibility" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
+    <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} placeholder="Lower numbers appear first" /></section>
+    <section className="form-section"><h3>Photo & resume</h3><p className="muted">Upload first in Photos &amp; files, then paste the URL here.</p>
+    <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a URL from the Photos & files tab" />
     <Text label="Cover URL" value={errText(f.cover_url)} onChange={(v) => set('cover_url', v)} />
-    <Text label="Location" value={errText(f.location)} onChange={(v) => set('location', v)} />
-    <Text label="Availability" value={errText(f.availability)} onChange={(v) => set('availability', v)} />
     <Text label="Resume URL (PDF)" value={errText(f.resume_path)} onChange={(v) => set('resume_path', v)} />
-    <Check label="Resume is public" value={Boolean(f.resume_is_public)} onChange={(v) => set('resume_is_public', v)} />
+    <Check label="Resume is public" value={Boolean(f.resume_is_public)} onChange={(v) => set('resume_is_public', v)} /></section>
+    <section className="form-section"><h3>Contact</h3>
     <Text label="Contact email" type="email" value={errText(f.contact_email)} onChange={(v) => set('contact_email', v)} error={errors.contact_email} />
     <Check label="Contact email is public" value={Boolean(f.contact_email_is_public)} onChange={(v) => set('contact_email_is_public', v)} />
-    <Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} />
-    <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} />
+    <Text label="Location" value={errText(f.location)} onChange={(v) => set('location', v)} />
+    <Text label="Availability" value={errText(f.availability)} onChange={(v) => set('availability', v)} placeholder="e.g. Open to internships" /></section>
+    <section className="form-section"><h3>Skills, education, experience & links</h3><p className="muted">Add as many as you like. Empty rows are ignored when you save.</p>
     <ListEditor title="Skills" items={(f.skills as AnyObj[]) || []} onChange={(v) => set('skills', v)} render={(it, setIt) => (<>
       <Text label="Skill name" value={errText(it.name)} onChange={(v) => setIt({ name: v })} />
       <Text label="Category" value={errText(it.category) || 'Technical'} onChange={(v) => setIt({ category: v })} />
@@ -83,8 +89,9 @@ export function MemberForm({ initial, onSaved, onCancel, push }: { initial: Part
       <Text label="Type (github, linkedin, email, portfolio…)" value={errText(it.type)} onChange={(v) => setIt({ type: v })} />
       <Text label="Label" value={errText(it.label)} onChange={(v) => setIt({ label: v })} />
       <Text label="URL" value={errText(it.url)} onChange={(v) => setIt({ url: v })} /></>)} />
-    <p><button className="btn" disabled={busy}>{busy ? <><span className="spinner" /> Saving…</> : 'Save member'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
-    <p className="muted">Publish note: saving writes to the database. The live static site updates only after a Netlify rebuild — it is not instant.</p>
+    </section>
+    <p><button className="btn" disabled={busy}>{busy ? <><span className="spinner" /> Saving…</> : selfCreate ? 'Create my profile' : 'Save member'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
+    <p className="muted">Saving stores this in the database. To make it live, rebuild the site in Netlify.</p>
   </form>);
 }
 
@@ -104,8 +111,9 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
   };
   const assignments = (f.project_members as AnyObj[]) || [];
   return (<form onSubmit={submit}>
-    <Text label="Title *" value={errText(f.title)} onChange={(v) => set('title', v)} error={errors.title} />
-    <Text label="Slug *" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} />
+    <section className="form-section"><h3>Basics</h3>
+    <Text label="Title *" value={errText(f.title)} onChange={(v) => { set('title', v); if (!errText(f.slug)) set('slug', slugify(v)); }} error={errors.title} />
+    <Text label="Web address (slug) *" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} placeholder="e.g. ai-showreel — this becomes /projects/ai-showreel" />
     <Text label="Tagline" value={errText(f.tagline)} onChange={(v) => set('tagline', v)} />
     <Area label="Description" value={errText(f.description)} onChange={(v) => set('description', v)} />
     <Area label="Case study" value={errText(f.case_study)} onChange={(v) => set('case_study', v)} rows={6} />
@@ -120,11 +128,14 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
     <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} />
     <Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} />
     <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} />
+    </section>
+    <section className="form-section"><h3>Team</h3><p className="muted">Choose who worked on this project, and what each person did.</p>
     <h3>Assigned members</h3>
     {assignments.map((a, i) => (<div className="card" key={i}><p><strong>{members.find((m) => m.id === a.member_id)?.full_name || errText(a.member_id)}</strong></p>
       <Text label="Role in project" value={errText(a.role_in_project)} onChange={(v) => set('project_members', assignments.map((x, j) => (j === i ? { ...x, role_in_project: v } : x)))} />
       <button type="button" className="btn secondary small" onClick={() => set('project_members', assignments.filter((_, j) => j !== i))}>Remove</button></div>))}
     <Field label="Add member"><select value="" onChange={(e) => { if (e.target.value) set('project_members', [...assignments, { member_id: e.target.value, role_in_project: '' }]); }}><option value="">— Choose a member —</option>{members.filter((m) => !assignments.some((a) => a.member_id === m.id)).map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></Field>
+    </section>
     <p><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save project'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
   </form>);
 }
@@ -164,6 +175,7 @@ export function SettingsForm({ initial, onSaved, push }: { initial: Partial<Site
     await saveForm('/admin/settings', 'PATCH', f, push, onSaved, setBusy);
   };
   return (<form onSubmit={submit}>
+    <section className="form-section"><h3>About the group</h3>
     <Text label="Group name *" value={errText(f.group_name)} onChange={(v) => set('group_name', v)} error={errors.group_name} />
     <Text label="Tagline" value={errText(f.tagline)} onChange={(v) => set('tagline', v)} />
     <Area label="Mission" value={errText(f.mission)} onChange={(v) => set('mission', v)} />
@@ -178,6 +190,7 @@ export function SettingsForm({ initial, onSaved, push }: { initial: Partial<Site
     <Text label="SEO title" value={errText(f.seo_title)} onChange={(v) => set('seo_title', v)} />
     <Text label="SEO description" value={errText(f.seo_description)} onChange={(v) => set('seo_description', v)} />
     <Text label="Open Graph image URL" value={errText(f.og_image_url)} onChange={(v) => set('og_image_url', v)} />
+    </section>
     <p><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button></p>
     <p className="muted">Publish note: saving writes to the database. The live static site updates only after a Netlify rebuild — it is not instant.</p>
   </form>);

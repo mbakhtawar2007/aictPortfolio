@@ -107,3 +107,24 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 @media (max-width: 640px) { main { padding: 20px 14px 72px; } .grid { grid-template-columns: 1fr; } .hero { padding: 28px 0 16px; } }
 @media (min-width: 1280px) { main { max-width: 1200px; } }
 @media (min-width: 1536px) { main { max-width: 1440px; } }
+
+/* Admin: user-friendly navigation, actions and forms (no new dependencies) */
+.admin-nav { display: flex; flex-wrap: wrap; gap: 20px 28px; align-items: flex-start; border-bottom: 2px solid var(--border); padding-bottom: 12px; margin-bottom: 20px; }
+.admin-nav-group { display: flex; flex-direction: column; gap: 6px; }
+.admin-nav-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.admin-tabs { border-bottom: none; margin-bottom: 0; }
+.action-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin: 12px 0 24px; }
+.action-card { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; color: var(--text); cursor: pointer; min-height: 96px; }
+.action-card:hover { border-color: var(--violet); }
+.action-card strong { display: block; font-size: 16px; margin-bottom: 4px; }
+.action-card span { color: var(--muted); font-size: 14px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 12px 0 24px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
+.stat-card strong { display: block; font-size: 1.6rem; line-height: 1.2; }
+.stat-card span { color: var(--muted); font-size: 14px; }
+.search-input { max-width: 360px; }
+.status-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; }
+.status-chip.published { background: rgba(52,211,153,0.18); }
+.status-chip.draft { background: rgba(245,158,11,0.18); }
+.form-section { border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin: 0 0 16px; background: var(--surface); }
+.form-section h3 { margin-top: 0; }

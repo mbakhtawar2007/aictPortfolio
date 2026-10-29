@@ -10,9 +10,25 @@ adminRouter.get('/messages', requireAdmin(async (req, res) => { try { return ok(
 adminRouter.get('/members', requireMemberOrAdmin(async (req, res) => {
   try { const all = await store.membersAll(); const list = req.actor.role === 'admin' ? all : all.filter((m) => m.id === req.actor.member_id); return ok(res, list); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); }
 }));
-adminRouter.post('/members', requireAdmin(async (req, res) => {
+adminRouter.post('/members', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(memberSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  try { const row = await store.saveMember('', p.data); await audit(store, { user_id: req.actor.uid, action: 'member.create', entity: 'members', entity_id: row.id }); return ok(res, row, 201); } catch { return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
+  // Member self-service: an invited/active member with no linked profile yet
+  // may create exactly one profile for themselves. It is always saved as a
+  // draft so an admin publishes it, and the account is linked to it.
+  // Members may never create profiles for other people, and this is not a
+  // public sign-up: only an admin-invited account reaches this route.
+  const isSelfCreate = req.actor.role === 'member';
+  if (isSelfCreate && req.actor.member_id) return fail(res, 403, 'forbidden', 'You already have a profile. Edit it instead of creating a new one.');
+  const data = isSelfCreate ? { ...p.data, status: 'draft' } : p.data;
+  try {
+    const row = await store.saveMember('', data);
+    await audit(store, { user_id: req.actor.uid, action: 'member.create', entity: 'members', entity_id: row.id });
+    if (isSelfCreate) {
+      await store.saveRole(req.actor.uid, { member_id: row.id });
+      await audit(store, { user_id: req.actor.uid, action: 'user.link_profile', entity: 'user_roles', entity_id: req.actor.uid });
+    }
+    return ok(res, row, 201);
+  } catch { return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
 }));
 adminRouter.patch('/members/:id', requireMemberOrAdmin(async (req, res) => {
   if (!canEditMember(req.actor, req.params.id)) return fail(res, 403, 'forbidden', 'You can edit only your own profile.');
@@ -158,6 +174,11 @@ adminRouter.post('/users/invite', requireAdmin(async (req, res) => {
 adminRouter.patch('/users/:id', requireAdmin(async (req, res) => {
   if (req.params.id === req.actor.uid) return fail(res, 403, 'forbidden', 'You cannot change your own account this way.');
   const p = parseBody(userPatchSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
+  // If a profile link is requested, it must point at a real team profile.
+  // Empty string is allowed and means "unlink this account from any profile".
+  if (p.data.member_id) {
+    try { const prof = await store.memberById(p.data.member_id); if (!prof) return fail(res, 404, 'not_found', 'Team profile not found.'); } catch { return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
+  }
   try { const row = await store.saveRole(req.params.id, p.data); await audit(store, { user_id: req.actor.uid, action: 'user.update', entity: 'user_roles', entity_id: req.params.id }); return ok(res, row); } catch { return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
 }));
 adminRouter.post('/users/:id/resend-invite', requireAdmin(async (req, res) => {

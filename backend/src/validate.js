@@ -80,7 +80,10 @@ export const inviteSchema = z.object({
 export const userPatchSchema = z.object({
   role: z.enum(['admin', 'member']).optional(),
   account_status: z.enum(['invited', 'active', 'deactivated']).optional(),
-}).refine((v) => v.role || v.account_status, { message: 'Nothing to update' });
+  // Admin-only link from a sign-in account to a team profile (members record).
+  // Empty string unlinks. The admin route verifies the profile exists first.
+  member_id: z.string().optional(),
+}).refine((v) => v.role || v.account_status || v.member_id !== undefined, { message: 'Nothing to update' });
 export const uploadSignSchema = z.object({
   file_type: z.enum(['image', 'pdf']),
   file_size: z.number().int().positive().max(5 * 1024 * 1024),

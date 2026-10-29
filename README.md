@@ -347,3 +347,21 @@ Frontend (from `frontend/`):
 Blocked (not run, do not claim): browser/viewport/keyboard/Lighthouse
 checks, live Firebase first-login, live Cloudinary upload/verify, live
 contact submission, and npm audit (registry-blocked in this environment).
+
+## Invitations
+
+Two admin-only ways to add a person (there is no public sign-up):
+
+1. **Invite via link (recommended):** Admin dashboard → Team accounts →
+   "Invite via link". The admin gets a link (valid 7 days, single use) and
+   can copy it or send it with the one-click "Send via Gmail" button, which
+   opens a ready-to-send Gmail message from the admin's own Gmail. The
+   recipient opens the link, sees the email and role fixed by the admin,
+   chooses their own password, and their account is created active. The
+   plaintext link is shown only once; if it is lost, revoke it and create
+   a new one. If Resend is configured with a verified sending domain, the
+   backend also emails the link automatically; without that, no automatic
+   email is sent — the link must be sent by the admin.
+2. **Invite an account:** the admin sets a password (shared privately) or
+   leaves it blank, in which case the page automatically sends Firebase's
+   own password-setup email to the person.

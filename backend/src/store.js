@@ -5,7 +5,7 @@ import { demoSite, demoMembers, demoProjects, demoAchievements } from './demoDat
 const clone = (v) => JSON.parse(JSON.stringify(v));
 let demo = null;
 function demoStore() {
-  if (!demo) demo = { site: clone(demoSite), members: clone(demoMembers), projects: clone(demoProjects), achievements: clone(demoAchievements), messages: [], roles: [], audit: [], revisions: [] };
+  if (!demo) demo = { site: clone(demoSite), members: clone(demoMembers), projects: clone(demoProjects), achievements: clone(demoAchievements), messages: [], roles: [], audit: [], revisions: [], invites: [] };
   return demo;
 }
 export function isFirebase() { return firebaseEnabled(); }
@@ -132,6 +132,31 @@ export const store = {
   async roleByEmail(email) { const all = await this.rolesAll(); return all.find((r) => r.email === email) || null; },
   async saveRole(uid, v) { if (isFirebase()) { await db().collection('user_roles').doc(uid).set({ ...v, uid }, { merge: true }); return { id: uid, ...v }; } const d = demoStore(); const ex = d.roles.find((r) => r.id === uid); if (ex) Object.assign(ex, v); else { const row = { id: uid, uid, ...v }; d.roles.push(row); return row; } return ex; },
   async addAudit(row) { if (isFirebase()) { await db().collection('audit_log').add(row); return; } demoStore().audit.push(row); },
+  // Invite-link tokens (2026-10-29): the plaintext token is NEVER stored
+  // — only its SHA-256 hash. The token is returned to the admin once, at
+  // creation, and is single-use with a 7-day expiry. Role, member link and
+  // email are locked into the invite record, so the accept step cannot
+  // escalate them (the accept endpoint takes no role/email fields).
+  async saveInvite(v) {
+    if (isFirebase()) { const ref = db().collection('invites').doc(); await ref.set({ ...v, id: ref.id }); return { id: ref.id, ...v }; }
+    const d = demoStore(); const row = { id: `invite-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...v }; d.invites.push(row); return row;
+  },
+  async inviteByHash(tokenHash) {
+    if (isFirebase()) { const s = await db().collection('invites').where('token_hash', '==', tokenHash).limit(1).get(); if (s.empty) return null; const doc = s.docs[0]; return { id: doc.id, ...doc.data() }; }
+    return demoStore().invites.find((i) => i.token_hash === tokenHash) || null;
+  },
+  async invitesAll() {
+    if (isFirebase()) { const s = await db().collection('invites').get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); }
+    return demoStore().invites;
+  },
+  async markInviteUsed(id) {
+    if (isFirebase()) { await db().collection('invites').doc(id).set({ used: true, used_at: new Date().toISOString() }, { merge: true }); return; }
+    const ex = demoStore().invites.find((i) => i.id === id); if (ex) { ex.used = true; ex.used_at = new Date().toISOString(); }
+  },
+  async markInviteRevoked(id) {
+    if (isFirebase()) { await db().collection('invites').doc(id).set({ revoked: true, revoked_at: new Date().toISOString() }, { merge: true }); return; }
+    const ex = demoStore().invites.find((i) => i.id === id); if (ex) { ex.revoked = true; ex.revoked_at = new Date().toISOString(); }
+  },
   async auditAll(limit = 50, offset = 0) {
     if (isFirebase()) { const s = await db().collection('audit_log').orderBy('created_at', 'desc').limit(limit + offset).get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })).slice(offset, offset + limit); }
     return [...demoStore().audit].reverse().slice(offset, offset + limit);

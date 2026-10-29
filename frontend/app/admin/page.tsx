@@ -44,6 +44,13 @@ export default function AdminDashboard() {
   const [editingAchievement, setEditingAchievement] = useState<Partial<Achievement> | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<{ kind: string; id: string; label: string } | null>(null); const [deleteBusy, setDeleteBusy] = useState(false);
   const [invite, setInvite] = useState({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); const [inviteBusy, setInviteBusy] = useState(false); const [inviteNote, setInviteNote] = useState('');
+  // Invite-link flow (2026-10-29): the recipient creates their own account
+  // from a link, instead of the admin setting a password or sending a
+  // Firebase setup email. The link is shown once, at creation.
+  const [linkInvite, setLinkInvite] = useState({ name: '', email: '', role: 'member', member_id: '' });
+  const [linkBusy, setLinkBusy] = useState(false); const [linkNote, setLinkNote] = useState('');
+  const [linkUrl, setLinkUrl] = useState(''); const [linkEmail, setLinkEmail] = useState('');
+  const [pendingLinks, setPendingLinks] = useState<Array<Record<string, unknown>>>([]);
   const [passwordDraft, setPasswordDraft] = useState<Record<string, string>>({});
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>({});
   const [revEntity, setRevEntity] = useState(''); const [revId, setRevId] = useState('');
@@ -75,6 +82,8 @@ export default function AdminDashboard() {
     if (a.error) errs.achievements = a.error.message; else setAchievements(a.data || []);
     if (msg.error) errs.messages = msg.error.message; else setMessages(msg.data || []);
     if (u.error) errs.users = u.error.message; else setUsers(u.data || []);
+    const links = await apiGet<Array<Record<string, unknown>>>('/admin/users/invite-links', true);
+    if (links.data) setPendingLinks(links.data);
     if (s.error) errs.settings = s.error.message; else setSettings(s.data);
     if (au.error) errs.audit = au.error.message; else setAudit(au.data || []);
     if (rev.error) errs.revisions = rev.error.message; else setRevisions(rev.data || []);
@@ -109,6 +118,23 @@ export default function AdminDashboard() {
     } else setInviteNote('Account created. The person will receive a link to set their own password.');
     push('success', 'Invitation created. Sending the same invitation again does not create a duplicate.');
     setInvite({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); reload();
+  }
+  async function sendLinkInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!linkInvite.name.trim() || !linkInvite.email.trim()) { push('error', 'Name and email are required.'); return; }
+    setLinkBusy(true); setLinkNote(''); setLinkUrl('');
+    const r = await apiSend('/admin/users/invite-link', 'POST', { name: linkInvite.name, email: linkInvite.email, role: linkInvite.role, member_id: linkInvite.member_id }, true);
+    setLinkBusy(false);
+    if (r.error) { push('error', r.error.message); return; }
+    const d = r.data as Record<string, unknown>;
+    setLinkUrl(String(d.invite_link || '')); setLinkEmail(linkInvite.email);
+    setLinkNote(d.email_delivery === 'attempted' ? 'Invitation link created and an email was sent. You can also copy the link below.' : 'Invitation link created. No automatic email was sent (Resend is not configured), so send this link to them yourself — the Gmail button opens a ready-to-send email with the link inside.');
+    setLinkInvite({ name: '', email: '', role: 'member', member_id: '' }); reload();
+  }
+  async function revokeLink(id: string) {
+    const key = `link-${id}`; if (pending[key]) return; setPending((x) => ({ ...x, [key]: true }));
+    try { const r = await apiSend(`/admin/users/invite-links/${id}/revoke`, 'POST', {}, true); if (r.error) push('error', r.error.message); else { push('success', 'Invitation link revoked.'); reload(); } }
+    finally { setPending((x) => ({ ...x, [key]: false })); }
   }
   async function userAction(id: string, kind: string, body?: unknown, email?: string) {
     const key = `user-${id}-${kind}`;
@@ -242,6 +268,18 @@ export default function AdminDashboard() {
         {invite.role === 'admin' && <label><input type="checkbox" checked={invite.confirmAdmin} onChange={(e) => setInvite({ ...invite, confirmAdmin: e.target.checked })} /> I deliberately confirm granting admin — this is not the default.</label>}
         <p><button className="btn" disabled={inviteBusy}>{inviteBusy ? 'Sending…' : 'Send invitation'}</button></p>
         {inviteNote && <p className="success">{inviteNote}</p>}</form>
+      <form onSubmit={sendLinkInvite}><h2>Invite via link (recommended)</h2><p className="muted">The person gets a link, opens it, and creates their own account with a password they choose. Their email and role are fixed by you and cannot be changed on that page. The link expires after 7 days and works only once.</p>
+        <label>Name<input required value={linkInvite.name} onChange={(e) => setLinkInvite({ ...linkInvite, name: e.target.value })} /></label>
+        <label>Email<input required type="email" value={linkInvite.email} onChange={(e) => setLinkInvite({ ...linkInvite, email: e.target.value })} /></label>
+        <label>Role<select value={linkInvite.role} onChange={(e) => setLinkInvite({ ...linkInvite, role: e.target.value })}><option value="member">Team member</option><option value="admin">Admin</option></select></label>
+        <label>Link to a team profile (optional)<select value={linkInvite.member_id} onChange={(e) => setLinkInvite({ ...linkInvite, member_id: e.target.value })}><option value="">No profile yet — they can create their own later</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
+        <p><button className="btn" disabled={linkBusy}>{linkBusy ? 'Creating…' : 'Create invitation link'}</button></p>
+        {linkNote && <p className="success">{linkNote}</p>}
+        {linkUrl && (<div><label>Invitation link<input readOnly value={linkUrl} onFocus={(e) => e.target.select()} /></label><p><button type="button" className="btn secondary small" onClick={() => { navigator.clipboard?.writeText(linkUrl); push('success', 'Link copied.'); }}>Copy link</button>{' '}<a className="btn secondary small" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(linkEmail)}&su=${encodeURIComponent('Your AICT portfolio invitation')}&body=${encodeURIComponent(`Hi,\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${linkUrl}\n`)}`}>Send via Gmail</a></p><p className="muted">Save this link now — it is shown only once and cannot be shown again. If it is lost, revoke it below and create a new one.</p></div>)}
+      </form>
+      <h2>Pending invitation links</h2>
+      <div className="grid">{pendingLinks.filter((l) => !l.used && !l.revoked).map((l) => (<div className="card" key={String(l.id)}><h3>{String(l.name || l.email)}</h3><p className="muted">{String(l.email)} · {String(l.role)} · expires {new Date(String(l.expires_at)).toLocaleDateString()}</p><p><button className="btn secondary small" disabled={!!pending[`link-${String(l.id)}`]} onClick={() => revokeLink(String(l.id))}>{pending[`link-${String(l.id)}`] ? 'Working…' : 'Revoke link'}</button></p></div>))}</div>
+      {!pendingLinks.filter((l) => !l.used && !l.revoked).length && <p className="muted">No pending invitation links.</p>}
       <h2>Accounts</h2>
       <div className="grid">{users.map((u) => { const linked = members.find((m) => m.id === u.member_id); return (<div className="card" key={u.id}><h3>{u.name || u.email}</h3><p className="muted">{u.email} · {u.role} · {u.account_status}</p><p className="muted">Profile: {linked ? linked.full_name : 'Not linked yet'}</p>
         <label>Link profile<select value={linkDraft[u.id] ?? u.member_id ?? ''} onChange={(e) => setLinkDraft({ ...linkDraft, [u.id]: e.target.value })}><option value="">No profile</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>

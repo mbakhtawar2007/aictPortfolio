@@ -111,3 +111,14 @@ export const uploadSignSchema = z.object({
   file_size: z.number().int().positive().max(5 * 1024 * 1024),
   file_name: z.string().min(1).max(200),
 });
+
+// Invite-link flow (2026-10-29): admin creates a token invite; the recipient
+// opens /invite?token=... and sets their own password. The accept step takes
+// NO email/role/member_id — those come from the invite record only.
+export const inviteLinkSchema = z.object({
+  email: z.string().email(), name: z.string().trim().min(1).max(200),
+  role: z.enum(['admin', 'member']).default('member'), member_id: z.string().optional().default(''),
+});
+export const inviteAcceptSchema = z.object({
+  token: z.string().min(32).max(200), password: z.string().min(6).max(128),
+});

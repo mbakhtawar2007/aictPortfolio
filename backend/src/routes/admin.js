@@ -1,9 +1,10 @@
 import express from 'express';
-import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, messagePatchSchema, setPasswordSchema } from '../validate.js';
+import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema } from '../validate.js';
 import { store, isFirebase } from '../store.js';
 import { authAdmin, firebaseEnabled, demoMode } from '../firebase.js';
 import { requireAdmin, requireMemberOrAdmin, canEditMember, canEditProject } from '../auth.js';
 import { audit } from '../audit.js';
+import crypto from 'crypto';
 export const adminRouter = express.Router();
 // NOTE: this router is mounted at /api/admin, so paths below are relative.
 // Who am I: lets the frontend route admins to /admin and members to
@@ -275,6 +276,42 @@ adminRouter.get('/media', requireMemberOrAdmin(async (req, res) => {
   } catch { return fail(res, 503, 'media_unavailable', 'Media library is temporarily unavailable.'); }
 }));
 // ---- Users / invitations (admin only) ----
+// ---- Invite links (admin only): create, list (no token hashes), revoke ----
+adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
+  const p = parseBody(inviteLinkSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
+  if (p.data.member_id) { const profile = await store.memberById(p.data.member_id); if (!profile) return fail(res, 404, 'not_found', 'The linked team profile does not exist.'); }
+  const existing = await store.roleByEmail(p.data.email);
+  if (existing) return fail(res, 409, 'already_exists', 'An account already exists for this email. Use Set password on that account instead of a new invitation link.');
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const row = await store.saveInvite({ email: p.data.email, name: p.data.name, role: p.data.role, member_id: p.data.member_id || '', token_hash: tokenHash, used: false, revoked: false, invited_by: req.actor.uid, invited_at: new Date().toISOString(), expires_at: expiresAt });
+  await audit(store, { user_id: req.actor.uid, action: 'user.invite_link_created', entity: 'invites', entity_id: row.id });
+  // The plaintext token is returned ONLY here, at creation. It is never
+  // stored and never returned again (list/revoke responses omit it).
+  const base = process.env.PUBLIC_SITE_URL || 'https://aictportfollio.netlify.app';
+  const inviteLink = `${base.replace(/\/$/, '')}/invite?token=${token}`;
+  let emailDelivery = 'link_only';
+  if (isFirebase() && process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
+    try {
+      const { Resend } = await import('resend');
+      await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: p.data.email, subject: 'Your AICT portfolio invitation', text: `You have been invited to the AICT group portfolio. Create your account here (link expires in 7 days): ${inviteLink}` });
+      emailDelivery = 'attempted';
+    } catch { emailDelivery = 'link_only'; }
+  }
+  return ok(res, { invite_id: row.id, email: row.email, role: row.role, expires_at: expiresAt, invite_link: inviteLink, email_delivery: emailDelivery }, 201);
+}));
+adminRouter.get('/users/invite-links', requireAdmin(async (req, res) => {
+  try {
+    const all = await store.invitesAll();
+    const safe = all.map(({ token_hash, ...rest }) => rest).sort((a, b) => String(b.invited_at || '').localeCompare(String(a.invited_at || '')));
+    return ok(res, safe);
+  } catch { return fail(res, 503, 'unavailable', 'Invitations are temporarily unavailable.'); }
+}));
+adminRouter.post('/users/invite-links/:id/revoke', requireAdmin(async (req, res) => {
+  try { const all = await store.invitesAll(); if (!all.some((i) => i.id === req.params.id)) return fail(res, 404, 'not_found', 'Invitation not found.'); await store.markInviteRevoked(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'user.invite_link_revoked', entity: 'invites', entity_id: req.params.id }); return ok(res, { revoked: true }); }
+  catch { return fail(res, 503, 'unavailable', 'Invitation could not be revoked.'); }
+}));
 adminRouter.get('/users', requireAdmin(async (req, res) => { try { return ok(res, await store.rolesAll()); } catch { return fail(res, 503, 'unavailable', 'Accounts are temporarily unavailable.'); } }));
 adminRouter.post('/users/invite', requireAdmin(async (req, res) => {
   const p = parseBody(inviteSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);

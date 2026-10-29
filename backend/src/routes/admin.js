@@ -23,6 +23,11 @@ async function slugTaken(kind, slug, excludeId) {
 adminRouter.get('/members', requireMemberOrAdmin(async (req, res) => {
   try { const all = await store.membersAll(); const list = req.actor.role === 'admin' ? all : all.filter((m) => m.id === req.actor.member_id); return ok(res, list); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); }
 }));
+// Group leader (2026-10-29): exactly one member profile may be the group
+// leader. Setting it on one profile clears it from every other profile.
+// Only admins reach this helper with is_leader=true — member requests
+// have the flag stripped before saving, in both POST and PATCH below.
+async function clearOtherLeaders(exceptId) { const all = await store.membersAll(); for (const m of all) { if (m.id !== exceptId && m.is_leader) { try { await store.saveMember(m.id, { is_leader: false }); } catch { /* best effort */ } } } }
 adminRouter.post('/members', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(memberSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
   // Member self-service: an invited/active member with no linked profile yet
@@ -38,13 +43,14 @@ adminRouter.post('/members', requireMemberOrAdmin(async (req, res) => {
     const linked = await store.memberById(req.actor.member_id);
     if (linked) return fail(res, 403, 'forbidden', 'You already have a profile. Edit it instead of creating a new one.');
   }
-  const data = isSelfCreate ? { ...p.data, status: 'draft' } : p.data;
+  const data = isSelfCreate ? { ...p.data, status: 'draft', is_leader: false } : p.data;
   if (await slugTaken('members', data.slug, '')) return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.');
   try {
     const row = await store.saveMember('', data);
     // Section 5F: claim the slug atomically; on a concurrent collision,
     // roll the just-created record back instead of leaving a duplicate.
     if (!(await store.reserveSlug('members', data.slug, row.id))) { await store.deleteMember(row.id); return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.'); }
+    if (data.is_leader) await clearOtherLeaders(row.id);
     await audit(store, { user_id: req.actor.uid, action: 'member.create', entity: 'members', entity_id: row.id });
     if (isSelfCreate) {
       await store.saveRole(req.actor.uid, { member_id: row.id });
@@ -63,6 +69,7 @@ adminRouter.patch('/members/:id', requireMemberOrAdmin(async (req, res) => {
   // existing draft to published and bypass admin review. Preserve the
   // existing status for member edits; only admins change it.
   if (req.actor.role === 'member') delete p.data.status;
+  if (req.actor.role === 'member') delete p.data.is_leader;
   if (p.data.slug && await slugTaken('members', p.data.slug, req.params.id)) return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.');
   const existing = await store.memberById(req.params.id);
   if (!existing) return fail(res, 404, 'not_found', 'Member not found.');
@@ -71,7 +78,7 @@ adminRouter.patch('/members/:id', requireMemberOrAdmin(async (req, res) => {
     await store.releaseSlug('members', existing.slug, req.params.id);
   }
   try { const ex = await store.memberById(req.params.id); if (ex) await store.addRevision({ entity: 'members', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); } catch { /* revision failure must not block the save */ }
-  try { await store.saveMember(req.params.id, p.data); const row = await store.memberById(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'member.update', entity: 'members', entity_id: req.params.id }); return ok(res, row); } catch { return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
+  try { await store.saveMember(req.params.id, p.data); if (p.data.is_leader) await clearOtherLeaders(req.params.id); const row = await store.memberById(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'member.update', entity: 'members', entity_id: req.params.id }); return ok(res, row); } catch { return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
 }));
 adminRouter.delete('/members/:id', requireAdmin(async (req, res) => { try { const ex = await store.memberById(req.params.id); if (ex) await store.addRevision({ entity: 'members', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteMember(req.params.id); if (ex.slug) await store.releaseSlug('members', ex.slug, req.params.id); await audit(store, { user_id: req.actor.uid, action: 'member.delete', entity: 'members', entity_id: req.params.id }); return ok(res, { deleted: true }); } catch { return fail(res, 503, 'unavailable', 'Member could not be deleted.'); } }));
 adminRouter.get('/projects', requireMemberOrAdmin(async (req, res) => {
@@ -157,11 +164,14 @@ adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
   const ext = p.data.file_name.split('.').pop()?.toLowerCase() || '';
   if (p.data.file_type === 'pdf' && ext !== 'pdf') return fail(res, 400, 'validation_error', 'Resumes must be PDF files.');
   if (p.data.file_type === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext)) return fail(res, 400, 'validation_error', 'Images must be jpg, png, webp or avif.');
+  if (p.data.file_type === 'video' && !['mp4', 'webm'].includes(ext)) return fail(res, 400, 'validation_error', 'Videos must be MP4 or WebM.');
+  const maxSignBytes = p.data.file_type === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (p.data.file_size > maxSignBytes) return fail(res, 400, 'validation_error', `File is larger than ${p.data.file_type === 'video' ? '50 MB' : '5 MB'}.`);
   try {
     const cloudinary = (await import('cloudinary')).v2;
     cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
     const timestamp = Math.round(Date.now() / 1000);
-    const folder = `aict-portfolio/${p.data.file_type === 'pdf' ? 'resumes' : 'images'}`;
+    const folder = `aict-portfolio/${p.data.file_type === 'video' ? 'videos' : p.data.file_type === 'pdf' ? 'resumes' : 'images'}`;
     // Server-generated path only; the browser never supplies a storage path.
     const public_id = `${folder}/${req.actor.uid}-${Date.now()}`;
     const signature = cloudinary.utils.api_sign_request({ timestamp, folder, public_id }, CLOUDINARY_API_SECRET);
@@ -177,7 +187,7 @@ adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
 adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
   const body = req.body || {};
   const publicId = typeof body.public_id === 'string' ? body.public_id : '';
-  const expected = body.file_type === 'pdf' ? 'pdf' : 'image';
+  const expected = body.file_type === 'video' ? 'video' : body.file_type === 'pdf' ? 'pdf' : 'image';
   if (!publicId.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be verified.');
   if (req.actor.role !== 'admin' && !publicId.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can verify only your own uploads.');
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
@@ -185,15 +195,16 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
   try {
     const cloudinary = (await import('cloudinary')).v2;
     cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
-    const resourceType = expected === 'pdf' ? 'raw' : 'image';
+    const resourceType = expected === 'video' ? 'video' : expected === 'pdf' ? 'raw' : 'image';
     let asset;
     try { asset = await cloudinary.api.resource(publicId, { resource_type: resourceType }); }
     catch { return fail(res, 404, 'not_found', 'No such uploaded asset was found.'); }
-    const allowedFormats = expected === 'pdf' ? ['pdf'] : ['jpg', 'jpeg', 'png', 'webp', 'avif'];
-    const okAsset = asset.bytes <= 5 * 1024 * 1024 && allowedFormats.includes((asset.format || '').toLowerCase());
+    const allowedFormats = expected === 'video' ? ['mp4', 'webm'] : expected === 'pdf' ? ['pdf'] : ['jpg', 'jpeg', 'png', 'webp', 'avif'];
+    const maxVerifyBytes = expected === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+    const okAsset = asset.bytes <= maxVerifyBytes && allowedFormats.includes((asset.format || '').toLowerCase());
     if (!okAsset) {
       try { await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }); } catch { /* removal best effort */ }
-      return fail(res, 400, 'validation_error', `Upload rejected: ${asset.bytes > 5 * 1024 * 1024 ? 'file is larger than 5 MB' : 'file format is not allowed'} (asset removed).`);
+      return fail(res, 400, 'validation_error', `Upload rejected: ${asset.bytes > maxVerifyBytes ? `file is larger than ${expected === 'video' ? '50 MB' : '5 MB'}` : 'file format is not allowed'} (asset removed).`);
     }
     return ok(res, { verified: true, secure_url: asset.secure_url, format: asset.format, bytes: asset.bytes, resource_type: asset.resource_type });
   } catch { return fail(res, 503, 'upload_unavailable', 'Upload verification is temporarily unavailable.'); }
@@ -268,6 +279,9 @@ adminRouter.get('/media', requireMemberOrAdmin(async (req, res) => {
     cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
     const result = await cloudinary.search.expression('folder:aict-portfolio/*').sort_by('created_at', 'desc').max_results(50).execute();
     let items = (result.resources || []).map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, width: r.width, height: r.height }));
+    let videoItems = [];
+    try { const vids = await cloudinary.api.resources({ type: 'upload', resource_type: 'video', prefix: 'aict-portfolio/', max_results: 50 }); videoItems = (vids.resources || []).map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, width: r.width, height: r.height })); } catch { /* videos simply absent from the list */ }
+    items = [...new Map([...items, ...videoItems].map((r) => [r.public_id, r])).values()].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     // Audit fix 2026-10-29 (security review): members previously saw every
     // member's files. Non-admins see only uploads signed under their own UID
     // (public_id is aict-portfolio/<type>/<uid>-<timestamp>).

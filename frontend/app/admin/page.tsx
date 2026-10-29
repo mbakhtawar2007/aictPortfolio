@@ -10,10 +10,10 @@ import { sendPasswordSetupEmail } from '../../lib/firebaseClient';
 type Tab = 'overview' | 'members' | 'projects' | 'achievements' | 'users' | 'messages' | 'media' | 'audit' | 'settings';
 const NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
   { label: 'Content', tabs: [{ id: 'overview', label: 'Start here' }, { id: 'members', label: 'Team members' }, { id: 'projects', label: 'Projects' }, { id: 'achievements', label: 'Achievements' }] },
-  { label: 'People', tabs: [{ id: 'users', label: 'Team accounts' }, { id: 'messages', label: 'Messages' }, { id: 'media', label: 'Photos & files' }] },
+  { label: 'People', tabs: [{ id: 'users', label: 'Team accounts' }, { id: 'messages', label: 'Messages' }, { id: 'media', label: 'Uploads' }] },
   { label: 'Advanced', tabs: [{ id: 'audit', label: 'History' }, { id: 'settings', label: 'Site settings' }] },
 ];
-const TAB_LABEL: Record<Tab, string> = { overview: 'Start here', members: 'Team members', projects: 'Projects', achievements: 'Achievements', users: 'Team accounts', messages: 'Messages', media: 'Photos & files', audit: 'History', settings: 'Site settings' };
+const TAB_LABEL: Record<Tab, string> = { overview: 'Start here', members: 'Team members', projects: 'Projects', achievements: 'Achievements', users: 'Team accounts', messages: 'Messages', media: 'Uploads', audit: 'History', settings: 'Site settings' };
 
 export default function AdminDashboard() {
   const { toasts, push, dismiss } = useToasts();
@@ -29,7 +29,14 @@ export default function AdminDashboard() {
   const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
   const [gateError, setGateError] = useState('');
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const allTabs = NAV_GROUPS.flatMap((g) => g.tabs);
+  // Limited admin (2026-10-29, user request): for now only Start here,
+  // Team members (profiles), Team accounts (member account creation) and
+  // Uploads (photo / resume / video upload) are shown. The other tabs'
+  // panels and forms below are untouched — re-add their ids to
+  // VISIBLE_TAB_IDS to bring a tab back.
+  const VISIBLE_TAB_IDS: Tab[] = ['overview', 'members', 'users', 'media'];
+  const NAV_GROUPS_VISIBLE = NAV_GROUPS.map((g) => ({ ...g, tabs: g.tabs.filter((x) => VISIBLE_TAB_IDS.includes(x.id)) })).filter((g) => g.tabs.length);
+  const allTabs = NAV_GROUPS_VISIBLE.flatMap((g) => g.tabs);
   const onTabKey = (e: React.KeyboardEvent, id: Tab) => {
     const idx = allTabs.findIndex((x) => x.id === id); let next: number | null = null;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % allTabs.length;
@@ -54,7 +61,7 @@ export default function AdminDashboard() {
   const [passwordDraft, setPasswordDraft] = useState<Record<string, string>>({});
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>({});
   const [revEntity, setRevEntity] = useState(''); const [revId, setRevId] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf'>('image');
+  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image');
   const [uploadProgress, setUploadProgress] = useState(0); const [uploadBusy, setUploadBusy] = useState(false); const [uploadUrl, setUploadUrl] = useState('');
   const [memberQuery, setMemberQuery] = useState(''); const [projectQuery, setProjectQuery] = useState(''); const [achievementQuery, setAchievementQuery] = useState('');
 
@@ -181,14 +188,15 @@ export default function AdminDashboard() {
     const ext = uploadFile.name.split('.').pop()?.toLowerCase() || '';
     if (uploadType === 'pdf' && ext !== 'pdf') { push('error', 'Resumes must be PDF files.'); return; }
     if (uploadType === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext)) { push('error', 'Images must be jpg, png, webp or avif.'); return; }
-    if (uploadFile.size > 5 * 1024 * 1024) { push('error', 'File must be 5 MB or smaller.'); return; }
+    if (uploadType === 'video' && !['mp4', 'webm'].includes(ext)) { push('error', 'Videos must be MP4 or WebM.'); return; }
+    if (uploadFile.size > (uploadType === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 50 MB or smaller.' : 'File must be 5 MB or smaller.'); return; }
     setUploadBusy(true); setUploadProgress(0); setUploadUrl('');
     const sign = await apiSend('/admin/upload/sign', 'POST', { file_type: uploadType, file_size: uploadFile.size, file_name: uploadFile.name }, true);
     if (sign.error || !sign.data) { push('error', sign.error?.message || 'Upload signing is unavailable.'); setUploadBusy(false); return; }
     const d = sign.data as Record<string, unknown>;
     const form = new FormData();
     form.append('file', uploadFile); form.append('api_key', String(d.api_key)); form.append('timestamp', String(d.timestamp)); form.append('folder', String(d.folder)); form.append('public_id', String(d.public_id)); form.append('signature', String(d.signature));
-    const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
+    const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };
     xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const v = await apiSend('/admin/upload/verify', 'POST', { public_id: String(d.public_id), file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } setUploadUrl(String((v.data as Record<string, unknown>).secure_url || j.secure_url)); push('success', 'Upload complete and verified by the server. Copy the URL into a member or project form.'); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
@@ -207,7 +215,7 @@ export default function AdminDashboard() {
   const openSelfCreate = () => { setSelfCreate(true); setEditingMember({}); };
   return (<div><h1>Admin dashboard</h1>
     <p className="muted">Signed in as {isAdmin ? 'admin' : 'team member'}. Admins can edit everything. Team members can only edit their own profile and projects they are assigned to.</p>
-    <nav className="admin-nav" aria-label="Admin sections">{NAV_GROUPS.map((g) => (<div className="admin-nav-group" key={g.label}><span className="admin-nav-label">{g.label}</span><div className="tabs admin-tabs" role="tablist" aria-label={`${g.label} sections`}>{g.tabs.map((t) => (<button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} id={`admin-tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls="admin-panel" tabIndex={tab === t.id ? 0 : -1} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} onKeyDown={(e) => onTabKey(e, t.id)}>{t.label}{t.id === 'messages' && unread > 0 ? ` (${unread})` : ''}</button>))}</div></div>))}
+    <nav className="admin-nav" aria-label="Admin sections">{NAV_GROUPS_VISIBLE.map((g) => (<div className="admin-nav-group" key={g.label}><span className="admin-nav-label">{g.label}</span><div className="tabs admin-tabs" role="tablist" aria-label={`${g.label} sections`}>{g.tabs.map((t) => (<button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} id={`admin-tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls="admin-panel" tabIndex={tab === t.id ? 0 : -1} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} onKeyDown={(e) => onTabKey(e, t.id)}>{t.label}{t.id === 'messages' && unread > 0 ? ` (${unread})` : ''}</button>))}</div></div>))}
       <button className="btn secondary small" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></nav>
     {Object.keys(sectionErrors).length > 0 && (<div><ErrorBox message={`Some sections could not be loaded: ${Object.entries(sectionErrors).map(([k, v]) => `${k} — ${v}`).join('; ')}`} /><p><button className="btn secondary" onClick={reload}>Try loading again</button></p><p className="muted">Sections that failed are not empty — their data simply did not arrive. Other sections still show their data.</p></div>)}
     <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`}>
@@ -218,20 +226,17 @@ export default function AdminDashboard() {
       <div className="action-grid">
         {isAdmin && <button className="action-card" onClick={() => { setTab('members'); setEditingMember({}); }}><strong>+ Add a team member</strong><span>Create the public profile visitors will see.</span></button>}
         {!isAdmin && !needsProfile && <button className="action-card" onClick={() => setTab('members')}><strong>Edit my profile</strong><span>Update your bio, skills and links.</span></button>}
-        <button className="action-card" onClick={() => { setTab('projects'); setEditingProject({}); }}><strong>+ Add a project</strong><span>Show work the group has done.</span></button>
         {isAdmin && <button className="action-card" onClick={() => setTab('users')}><strong>Invite an account</strong><span>Let someone log in, with a password you set or a setup email.</span></button>}
-        {isAdmin && <button className="action-card" onClick={() => setTab('settings')}><strong>Edit site settings</strong><span>Group name, tagline, contact and social links.</span></button>}
+        <button className="action-card" onClick={() => setTab('media')}><strong>Upload a video</strong><span>Upload a video, photo or resume, then copy its URL into a form.</span></button>
       </div>
       <h2>Your site at a glance</h2>
       <div className="stat-grid">
         <div className="stat-card"><strong>{members.length}</strong><span>Team members</span></div>
-        <div className="stat-card"><strong>{projects.length}</strong><span>Projects</span></div>
-        <div className="stat-card"><strong>{achievements.length}</strong><span>Achievements</span></div>
-        <div className="stat-card"><strong>{unread}</strong><span>Unread messages</span></div>
         <div className="stat-card"><strong>{users.length}</strong><span>Sign-in accounts</span></div>
+        <div className="stat-card"><strong>{media.length}</strong><span>Files uploaded</span></div>
       </div>
-      <div className="card"><h2>How publishing works — in plain words</h2><p>Save here, and visitors see it on their next page load. No rebuild, no manual deploy — public pages fetch the latest data from the backend every time they load, including a brand-new profile or project page.</p><p className="muted">Drafts, private resumes, messages and history never appear on public pages.</p></div>
-      {isAdmin && (<div className="card"><h2>First steps checklist</h2><p>{settings?.group_name ? '✓' : '○'} Site settings filled in<br />{members.length > 0 ? '✓' : '○'} At least one team member<br />{projects.length > 0 ? '✓' : '○'} At least one project<br />{members.some((m) => m.status === 'published') ? '✓' : '○'} At least one member published (not just draft)</p></div>)}
+      <div className="card"><h2>How publishing works — in plain words</h2><p>Save here, and visitors see it on their next page load. No rebuild, no manual deploy — public pages fetch the latest data from the backend every time they load, including a brand-new profile page.</p><p className="muted">Drafts, private resumes, messages and history never appear on public pages.</p></div>
+      {isAdmin && (<div className="card"><h2>First steps checklist</h2><p>{members.length > 0 ? '✓' : '○'} At least one team member<br />{members.some((m) => m.status === 'published') ? '✓' : '○'} At least one member published (not just draft)<br />{users.length > 0 ? '✓' : '○'} At least one sign-in account</p></div>)}
     </div>)}
 
     {tab === 'members' && (<div>
@@ -239,9 +244,9 @@ export default function AdminDashboard() {
       {needsProfile && (<div className="card"><h2>You don't have a profile yet</h2><p>Create your team profile here. It will be saved as a draft, and an admin will review and publish it.</p><p><button className="btn" onClick={openSelfCreate}>Create my profile</button></p></div>)}
       {isAdmin && <p><button className="btn" onClick={() => { setSelfCreate(false); setEditingMember({}); }}>+ New member</button></p>}
       <p><input className="search-input" aria-label="Search team members" placeholder="Search team members…" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} /></p>
-      <div className="grid">{filteredMembers.map((m) => (<div className="card" key={m.id}><h3>{m.full_name} <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title} · <span className={`status-chip ${m.status}`}>{m.status === 'published' ? 'Published' : 'Draft'}</span></p><p><button className="btn secondary small" onClick={() => { setSelfCreate(false); setEditingMember(m); }}>Edit</button>{' '}{isAdmin && <button className="btn secondary small" onClick={() => setDeleting({ kind: 'member', id: m.id, label: m.full_name })}>Delete</button>}</p></div>))}</div>
+      <div className="grid">{filteredMembers.map((m) => (<div className="card" key={m.id}><h3>{m.full_name} <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title} · <span className={`status-chip ${m.status}`}>{m.status === 'published' ? 'Published' : 'Draft'}</span>{m.is_leader ? ' ' : ''}{m.is_leader && <span className="chip">Group Leader</span>}</p><p><button className="btn secondary small" onClick={() => { setSelfCreate(false); setEditingMember(m); }}>Edit</button>{' '}{isAdmin && <button className="btn secondary small" onClick={() => setDeleting({ kind: 'member', id: m.id, label: m.full_name })}>Delete</button>}</p></div>))}</div>
       {!filteredMembers.length && !sectionErrors.members && <p className="muted">{memberQuery ? 'No team members match that search.' : 'No team members yet.'} {isAdmin && <button className="btn secondary small" onClick={() => { setSelfCreate(false); setEditingMember({}); }}>Add the first member</button>}</p>}
-      {editingMember !== undefined && (<Modal title={selfCreate ? 'Create my profile' : editingMember?.id ? 'Edit member' : 'New member'} onClose={() => { setEditingMember(undefined); setSelfCreate(false); }}><MemberForm initial={editingMember} selfCreate={selfCreate} onSaved={() => { setEditingMember(undefined); setSelfCreate(false); reload(); }} onCancel={() => { setEditingMember(undefined); setSelfCreate(false); }} push={push} /></Modal>)}</div>)}
+      {editingMember !== undefined && (<Modal title={selfCreate ? 'Create my profile' : editingMember?.id ? 'Edit member' : 'New member'} onClose={() => { setEditingMember(undefined); setSelfCreate(false); }}><MemberForm initial={editingMember} selfCreate={selfCreate} canSetLeader={isAdmin} onSaved={() => { setEditingMember(undefined); setSelfCreate(false); reload(); }} onCancel={() => { setEditingMember(undefined); setSelfCreate(false); }} push={push} /></Modal>)}</div>)}
 
     {tab === 'projects' && (<div><p>{isAdmin && <button className="btn" onClick={() => setEditingProject({})}>+ New project</button>} {!isAdmin && <button className="btn" onClick={() => setEditingProject({})}>+ New project</button>}</p>
       <p><input className="search-input" aria-label="Search projects" placeholder="Search projects…" value={projectQuery} onChange={(e) => setProjectQuery(e.target.value)} /></p>
@@ -295,17 +300,17 @@ export default function AdminDashboard() {
         <p><a className="btn secondary small" href={`mailto:${m.email}?subject=${encodeURIComponent('Re: ' + (m.subject || ''))}`}>Reply by email</a>{' '}<button className="btn secondary small" disabled={!!pending[`msg-${m.id}`]} onClick={() => messageAction(m.id, !m.read)}>{pending[`msg-${m.id}`] ? 'Working…' : (m.read ? 'Mark unread' : 'Mark read')}</button>{' '}<button className="btn secondary small" onClick={() => setDeleting({ kind: 'message', id: m.id, label: m.subject || m.name })}>Delete</button></p></div>))}
       {!messages.length && !sectionErrors.messages && <p className="muted">No messages yet.</p>}</div>))}
 
-    {tab === 'media' && (<div><h2>Photos & files</h2>
+    {tab === 'media' && (<div><h2>Uploads</h2><p className="muted">Videos count more toward the free Cloudinary quota — keep them short. Photos and resumes stay at 5 MB, videos at 50 MB.</p>
       {mediaError && <p className="error">{mediaError} — uploads will not work until Cloudinary is set up in Vercel.</p>}
       <form onSubmit={upload}><h3>Upload</h3>
-        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option></select></label>
-        <label>File<input type="file" accept={uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
+        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option><option value="video">Video (MP4/WebM, max 50 MB)</option></select></label>
+        <label>File<input type="file" accept={uploadType === 'video' ? 'video/mp4,video/webm' : uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
         {uploadBusy && <p>Uploading… {uploadProgress}%</p>}
         {uploadUrl && <p className="success">Uploaded: {uploadUrl} <CopyButton text={uploadUrl} label="Copy URL" /></p>}
         <p><button className="btn" disabled={uploadBusy}>{uploadBusy ? 'Uploading…' : 'Upload'}</button></p>
         <p className="muted">Uploads are checked by the server first. Your Cloudinary secret keys never reach the browser. After uploading, copy the URL into a member or project form.</p></form>
-      <div className="grid">{media.map((f) => (<div className="card" key={f.public_id}>{f.resource_type === 'image' ? <img src={f.secure_url} alt={f.public_id} style={{ maxWidth: '100%', borderRadius: 12 }} /> : <p>{f.public_id} ({f.format})</p>}<p className="muted">{f.public_id} · {f.format} · {f.bytes ? `${Math.round(f.bytes / 1024)} KB` : ''} · {f.created_at}</p><CopyButton text={f.secure_url} label="Copy URL" /></div>))}</div>
-      {!media.length && !mediaError && <p className="muted">No files yet. Upload a photo or resume above, then paste its URL into a form.</p>}</div>)}
+      <div className="grid">{media.map((f) => (<div className="card" key={f.public_id}>{f.resource_type === 'video' ? <video controls src={f.secure_url} style={{ maxWidth: '100%', borderRadius: 12 }} /> : f.resource_type === 'image' ? <img src={f.secure_url} alt={f.public_id} style={{ maxWidth: '100%', borderRadius: 12 }} /> : <p>{f.public_id} ({f.format})</p>}<p className="muted">{f.public_id} · {f.format} · {f.bytes ? `${Math.round(f.bytes / 1024)} KB` : ''} · {f.created_at}</p><CopyButton text={f.secure_url} label="Copy URL" /></div>))}</div>
+      {!media.length && !mediaError && <p className="muted">No files yet. Upload a photo, resume or video above, then paste its URL into a form.</p>}</div>)}
 
     {tab === 'audit' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div><h2>History</h2><p className="muted">Who changed what, and when. This is a record — it cannot be edited from here.</p>
       {audit.map((a) => (<div className="card" key={a.id}><p><strong>{a.action}</strong> · {a.entity} / {a.entity_id}</p><p className="muted">{a.user_id} · {a.created_at}</p></div>))}

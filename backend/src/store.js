@@ -20,7 +20,7 @@ export const store = {
   async site() { if (isFirebase()) { const s = await db().collection('site_settings').doc('main').get(); return s.exists ? s.data() : null; } return demoStore().site; },
   async saveSite(v) { if (isFirebase()) { await db().collection('site_settings').doc('main').set(v, { merge: true }); return v; } demoStore().site = { ...demoStore().site, ...v }; return demoStore().site; },
   async membersAll() { if (isFirebase()) { const s = await db().collection('members').get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); } return demoStore().members; },
-  async membersPublished() { const all = await this.membersAll(); return all.filter((m) => m.status === 'published').map(publicMember).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)); },
+  async membersPublished() { const all = await this.membersAll(); return all.filter((m) => m.status === 'published').map(publicMember).sort((a, b) => ((b.is_leader ? 1 : 0) - (a.is_leader ? 1 : 0)) || ((a.sort_order || 0) - (b.sort_order || 0))); },
   async memberBySlug(slug) { const all = await this.membersPublished(); return all.find((m) => m.slug === slug) || null; },
   async memberById(id) { const all = await this.membersAll(); return all.find((m) => m.id === id) || null; },
   async replaceMember(id, v) { if (isFirebase()) { const ref = db().collection('members').doc(id); await ref.set({ ...v, id: ref.id }); return { id: ref.id, ...v }; } const d = demoStore(); const ex = d.members.find((m) => m.id === id); if (ex) { const idx = d.members.indexOf(ex); d.members[idx] = { id, ...v }; return d.members[idx]; } const row = { id, ...v }; d.members.push(row); return row; },

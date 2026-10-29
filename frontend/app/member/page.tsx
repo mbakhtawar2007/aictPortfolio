@@ -22,7 +22,7 @@ export default function MemberPage() {
   const [selfCreate, setSelfCreate] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null | undefined>(undefined);
   const [editingAchievement, setEditingAchievement] = useState<Partial<Achievement> | null | undefined>(undefined);
-  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf'>('image');
+  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image');
   const [uploadBusy, setUploadBusy] = useState(false); const [uploadUrl, setUploadUrl] = useState('');
 
   useEffect(() => { setToken(window.localStorage.getItem('aict_admin_token')); }, []);
@@ -51,14 +51,15 @@ export default function MemberPage() {
 
   async function upload(e: React.FormEvent) {
     e.preventDefault(); if (!uploadFile) { push('error', 'Choose a file first.'); return; }
-    if (uploadFile.size > 5 * 1024 * 1024) { push('error', 'File must be 5 MB or smaller.'); return; }
+    if (uploadType === 'video' && !['mp4', 'webm'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Videos must be MP4 or WebM.'); return; }
+    if (uploadFile.size > (uploadType === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 50 MB or smaller.' : 'File must be 5 MB or smaller.'); return; }
     setUploadBusy(true); setUploadUrl('');
     const sign = await apiSend('/admin/upload/sign', 'POST', { file_type: uploadType, file_size: uploadFile.size, file_name: uploadFile.name }, true);
     if (sign.error || !sign.data) { push('error', sign.error?.message || 'Upload signing is unavailable.'); setUploadBusy(false); return; }
     const d = sign.data as Record<string, unknown>;
     const form = new FormData();
     form.append('file', uploadFile); form.append('api_key', String(d.api_key)); form.append('timestamp', String(d.timestamp)); form.append('folder', String(d.folder)); form.append('public_id', String(d.public_id)); form.append('signature', String(d.signature));
-    const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
+    const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
     xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const v = await apiSend('/admin/upload/verify', 'POST', { public_id: String(d.public_id), file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } setUploadUrl(String((v.data as Record<string, unknown>).secure_url || j.secure_url)); push('success', 'Upload complete and verified by the server. Copy the URL into your profile or project form.'); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
     xhr.onerror = () => { setUploadBusy(false); push('error', 'Upload failed (network).'); };
@@ -77,7 +78,7 @@ export default function MemberPage() {
 
     <section className="form-section"><h2>My profile</h2>
       {needsProfile && (<div><p>You don't have a profile yet. Create it here — it will be saved as a draft, and an admin will review and publish it.</p><p><button className="btn" onClick={() => { setSelfCreate(true); setEditingMember({}); }}>Create my profile</button></p></div>)}
-      {myProfile && (<div><p><strong>{myProfile.full_name}</strong> · {myProfile.role_title} · <span className={`status-chip ${myProfile.status}`}>{myProfile.status === 'published' ? 'Published' : 'Draft — waiting for admin to publish'}</span></p><p><button className="btn" onClick={() => { setSelfCreate(false); setEditingMember(myProfile); }}>Edit my profile</button></p></div>)}
+      {myProfile && (<div><p><strong>{myProfile.full_name}</strong> · {myProfile.role_title} · <span className={`status-chip ${myProfile.status}`}>{myProfile.status === 'published' ? 'Published' : 'Draft — waiting for admin to publish'}</span>{myProfile.is_leader && <span className="chip">Group Leader</span>}</p><p><button className="btn" onClick={() => { setSelfCreate(false); setEditingMember(myProfile); }}>Edit my profile</button></p></div>)}
       {editingMember !== undefined && (<Modal title={selfCreate ? 'Create my profile' : 'Edit my profile'} onClose={() => { setEditingMember(undefined); setSelfCreate(false); }}><MemberForm initial={editingMember} selfCreate={selfCreate} onSaved={() => { setEditingMember(undefined); setSelfCreate(false); reload(); }} onCancel={() => { setEditingMember(undefined); setSelfCreate(false); }} push={push} /></Modal>)}
     </section>
 
@@ -96,14 +97,14 @@ export default function MemberPage() {
       {editingAchievement !== undefined && (<Modal title={editingAchievement?.id ? 'Edit achievement' : 'New achievement'} onClose={() => setEditingAchievement(undefined)}><AchievementForm initial={editingAchievement} members={members} isAdmin={false} onSaved={() => { setEditingAchievement(undefined); reload(); }} onCancel={() => setEditingAchievement(undefined)} push={push} /></Modal>)}
     </section>
 
-    <section className="form-section"><h2>My photos & files</h2>
+    <section className="form-section"><h2>My photos, files & videos</h2>
       <form onSubmit={upload}>
-        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option></select></label>
-        <label>File<input type="file" accept={uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
+        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option><option value="video">Video (MP4/WebM, max 50 MB)</option></select></label>
+        <label>File<input type="file" accept={uploadType === 'video' ? 'video/mp4,video/webm' : uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
         {uploadUrl && <p className="success">Uploaded: {uploadUrl} <CopyButton text={uploadUrl} label="Copy URL" /></p>}
         <p><button className="btn" disabled={uploadBusy}>{uploadBusy ? 'Uploading…' : 'Upload'}</button></p>
         <p className="muted">After uploading, copy the URL into your profile or project form.</p></form>
-      <div className="grid">{media.slice(0, 12).map((f) => (<div className="card" key={f.public_id}>{f.resource_type === 'image' ? <img src={f.secure_url} alt={f.public_id} style={{ maxWidth: '100%', borderRadius: 12 }} /> : <p>{f.public_id}</p>}<CopyButton text={f.secure_url} label="Copy URL" /></div>))}</div>
+      <div className="grid">{media.slice(0, 12).map((f) => (<div className="card" key={f.public_id}>{f.resource_type === 'video' ? <video controls src={f.secure_url} style={{ maxWidth: '100%', borderRadius: 12 }} /> : f.resource_type === 'image' ? <img src={f.secure_url} alt={f.public_id} style={{ maxWidth: '100%', borderRadius: 12 }} /> : <p>{f.public_id}</p>}<CopyButton text={f.secure_url} label="Copy URL" /></div>))}</div>
     </section>
 
     <div className="card"><h2>How publishing works</h2><p>Saving stores your change right away, and visitors see published changes on their next page load — no rebuild needed. Drafts stay hidden until an admin publishes them. That includes achievements: creating one does not make it public immediately.</p></div>

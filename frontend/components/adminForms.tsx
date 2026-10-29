@@ -34,8 +34,8 @@ async function saveForm(path: string, method: string, body: unknown, push: (k: '
   onSaved(); return true;
 }
 
-export function MemberForm({ initial, onSaved, onCancel, push, selfCreate }: { initial: Partial<Member> | null; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void; selfCreate?: boolean }) {
-  const [f, setF] = useState<AnyObj>({ slug: '', full_name: '', role_title: '', short_intro: '', bio: '', photo_url: '', cover_url: '', location: '', availability: '', resume_path: '', resume_is_public: false, contact_email: '', contact_email_is_public: false, status: 'draft', sort_order: 0, skills: [], education: [], experience: [], links: [], ...(initial || {}) });
+export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSetLeader }: { initial: Partial<Member> | null; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void; selfCreate?: boolean; canSetLeader?: boolean }) {
+  const [f, setF] = useState<AnyObj>({ slug: '', full_name: '', role_title: '', short_intro: '', bio: '', photo_url: '', cover_url: '', location: '', availability: '', resume_path: '', resume_is_public: false, contact_email: '', contact_email_is_public: false, status: 'draft', is_leader: false, sort_order: 0, skills: [], education: [], experience: [], links: [], ...(initial || {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const isCreate = !initial?.id;
   // Minimal-create (2026-10-29): creating a member used to show the whole
@@ -73,6 +73,7 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate }: { i
     <Text label="Short intro" value={errText(f.short_intro)} onChange={(v) => set('short_intro', v)} />
     <Area label="Bio" value={errText(f.bio)} onChange={(v) => set('bio', v)} rows={6} />
     {!selfCreate && <><Select label="Visibility" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
+    {canSetLeader && <><Check label="Group leader" value={Boolean(f.is_leader)} onChange={(v) => set('is_leader', v)} /><p className="muted">Only one member can be the group leader. Choosing this removes it from anyone else.</p></>}
     <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} placeholder="Lower numbers appear first" /></section>
     <section className="form-section"><h3>Photo & resume</h3><p className="muted">Upload first in Photos &amp; files, then paste the URL here.</p>
     <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a URL from the Photos & files tab" />
@@ -120,7 +121,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
   const initialIds = (initial as AnyObj)?.member_ids as string[] | undefined;
   const seededMembers = (initialMembers && initialMembers.length) ? initialMembers
     : (initialIds || []).map((member_id) => ({ member_id, role_in_project: '' }));
-  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
+  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', is_leader: false, sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const csv = (v: unknown) => Array.isArray(v) ? v.join(', ') : '';

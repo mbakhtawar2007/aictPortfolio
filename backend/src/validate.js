@@ -37,6 +37,7 @@ export const memberSchema = z.object({
   contact_email: z.string().email().optional().or(z.literal('')).default(''),
   contact_email_is_public: z.boolean().optional().default(false),
   status: z.enum(['draft', 'published']).optional().default('draft'),
+  is_leader: z.boolean().optional().default(false),
   sort_order: z.number().int().optional().default(0),
   skills: z.array(z.object({ name: z.string().min(1), category: z.string().optional().default('Technical'), level: z.number().int().min(1).max(100).optional().default(50) })).optional().default([]),
   education: z.array(z.object({ institution: z.string().min(1), degree: z.string().optional().default(''), field: z.string().optional().default(''), start_date: z.string().optional().default(''), end_date: z.string().optional().default(''), description: z.string().optional().default('') })).optional().default([]),
@@ -107,8 +108,8 @@ export const userPatchSchema = z.object({
   member_id: z.string().optional(),
 }).refine((v) => v.role || v.account_status || v.member_id !== undefined, { message: 'Nothing to update' });
 export const uploadSignSchema = z.object({
-  file_type: z.enum(['image', 'pdf']),
-  file_size: z.number().int().positive().max(5 * 1024 * 1024),
+  file_type: z.enum(['image', 'pdf', 'video']),
+  file_size: z.number().int().positive().max(50 * 1024 * 1024),
   file_name: z.string().min(1).max(200),
 });
 

@@ -33,7 +33,7 @@ export default function MemberDetail({ slug }: { slug: string }) {
   const friendlyCv = `${m.full_name.replace(/[^a-zA-Z]+/g, '-')}-CV.pdf`;
   return (<div>
     {m.cover_url ? <img className="blur-up" src={m.cover_url} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 20 }} /> : null}
-    <h1>{m.full_name} <SampleBadge isSample={m.isSample} /></h1>
+    <h1>{m.full_name} <SampleBadge isSample={m.isSample} />{m.is_leader && <span className="chip">Group Leader</span>}</h1>
     <p className="muted">{m.role_title} {m.location ? `· ${m.location}` : ''} {m.availability ? `· ${m.availability}` : ''}</p>
     {m.photo_url ? <img className="blur-up" src={m.photo_url} alt={`${m.full_name} photo`} tabIndex={0} role="button" aria-label={`Open ${m.full_name} photo`} style={{ maxWidth: 320, borderRadius: 20, cursor: 'pointer' }} onClick={() => setLightbox(m.photo_url || null)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(m.photo_url || null); } }} /> : <span className="avatar" aria-hidden="true" style={{ width: 96, height: 96, fontSize: 28 }}>{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}
     <h2>About</h2><p>{m.bio || m.short_intro || 'No biography published yet.'}</p>

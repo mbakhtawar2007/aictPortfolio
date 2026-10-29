@@ -66,7 +66,8 @@ export function Tabs({ id, label, tabs, value, onChange }: { id: string; label: 
     if (next !== null) { e.preventDefault(); refs.current[next]?.focus(); }
   };
   return (<div className="tabs" role="tablist" aria-label={label}>
-    {tabs.map((tab, i) => (<button key={tab.id} ref={(el) => { refs.current[i] = el; }} id={`${id}-tab-${tab.id}`} role="tab" aria-selected={value === tab.id} aria-controls={`${id}-panel`} tabIndex={value === tab.id ? 0 : -1} className={`tab-btn${value === tab.id ? ' active' : ''}`} onClick={() => onChange(tab.id)} onKeyDown={(e) => onKey(e, i)}>{tab.label}</button>))}
+    {tabs.map((tab, i) => { const safeId = tab.id.replace(/\s+/g, '-'); return (<button key={tab.id} ref={(el) => { refs.current[i] = el; }} id={`${id}-tab-${safeId}`} role="tab" aria-selected={value === tab.id} aria-controls={`${id}-panel`} tabIndex={value === tab.id ? 0 : -1} className={`tab-btn${value === tab.id ? ' active' : ''}`} onClick={() => onChange(tab.id)} onKeyDown={(e) => onKey(e, i)}>{tab.label}</button>); })}
+
   </div>);
 }
 export function ConfirmDialog({ text, onConfirm, onCancel, busy }: { text: string; onConfirm: () => void; onCancel: () => void; busy?: boolean }) {
@@ -79,7 +80,8 @@ export function Field({ label, error, children }: { label: string; error?: strin
 }
 export function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  return (<button className="btn secondary small" title={copied ? 'Copied' : 'Copy to clipboard'} onClick={async () => { try { await navigator.clipboard.writeText(text); } catch { /* clipboard unavailable */ } setCopied(true); setTimeout(() => setCopied(false), 2000); }}>{copied ? '✓ Copied' : label}</button>);
+  const [failed, setFailed] = useState(false);
+  return (<button className="btn secondary small" title={copied ? 'Copied' : failed ? 'Copy failed' : 'Copy to clipboard'} onClick={async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setFailed(false); setTimeout(() => setCopied(false), 2000); } catch { setFailed(true); setCopied(false); } }}>{copied ? '✓ Copied' : failed ? 'Copy failed — select it manually' : label}</button>);
 }
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);

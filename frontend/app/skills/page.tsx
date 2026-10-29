@@ -20,15 +20,14 @@ export default function SkillsPage() {
     return [...map.values()].filter((r) => (cat === 'All' || r.category === cat) && r.name.toLowerCase().includes(q.toLowerCase())).sort((a, b) => b.members.length - a.members.length);
   }, [members, q, cat]);
   if (loading) return <SkeletonGrid />;
-  return (<div><h1>Team Skills Matrix</h1><p className="muted">Built client-side from published member profiles — there is no separate aggregate endpoint. Click a member to open their profile.</p>
+  return (<div><h1>Team Skills Matrix</h1><p className="muted">Click a member to open their profile.</p>
     <Tabs id="skills" label="Skill categories" tabs={cats.map((c) => ({ id: c, label: c }))} value={cat} onChange={setCat} />
-    <div role="tabpanel" id="skills-panel" aria-labelledby={`skills-tab-${cat}`}>
+    <div role="tabpanel" id="skills-panel" aria-labelledby={`skills-tab-${cat.replace(/\s+/g, '-')}`}>
     {error ? (<div><ErrorBox message={error} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The member list could not be loaded, so no skills can be shown. This is not an empty list — the request failed.</p></div>) : (<>
-    <label>Find a member by skill<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. React" /></label>
+    <label>Find a skill<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. React" /></label>
     <p className="muted">{rows.length} skills {(q || cat !== 'All') && <button className="btn secondary small" onClick={() => { setQ(''); setCat('All'); }}>Clear filters</button>}</p>
     <div className="heatmap">{rows.map((r) => (<div className="heat-cell" key={r.name}><strong>{r.name}</strong><span className="muted">{r.category} · {r.members.length} member{r.members.length === 1 ? '' : 's'}</span>
       <p>{r.members.map((m) => <span key={m.slug}><a href={`/team/${m.slug}`}>{m.name}</a>{m.level ? ` (${m.level}%)` : ''} </span>)}</p></div>))}</div>
     {!rows.length && <Empty text="No skills match that filter." />}</>)}
-    </div>
-    <p className="muted">Sample data is labelled SAMPLE on member profiles; this matrix does not invent skills.</p></div>);
+    </div></div>);
 }

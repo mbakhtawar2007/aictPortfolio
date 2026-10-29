@@ -18,5 +18,5 @@ export default function TeamPage() {
     <label>Filter by role<select value={role} onChange={(e) => setRole(e.target.value)}>{roles.map((r) => <option key={r}>{r}</option>)}</select></label>
     <p className="muted">{filtered.length} of {members.length} members {(q || role !== 'All') && <button className="btn secondary small" onClick={() => { setQ(''); setRole('All'); }}>Clear filters</button>}</p>
     <div className="grid">{filtered.map((m) => (<div className="card card-hover" key={m.id}><span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span><h3><a href={`/team/${m.slug}`}>{m.full_name}</a> <SampleBadge isSample={m.isSample} />{m.is_leader && <span className="chip">Group Leader</span>}</h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>))}</div>
-    {!filtered.length && <Empty text="No team members match that search. Try clearing the filters." />}</>)}</div>);
+    {!filtered.length && <Empty text={members.length ? 'No team members match that search. Try clearing the filters.' : 'No published team members yet.'} />}</>)}</div>);
 }

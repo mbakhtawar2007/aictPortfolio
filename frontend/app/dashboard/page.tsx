@@ -24,5 +24,5 @@ export default function DashboardGate() {
   if (gateError) return (<div><h1>Checking your account</h1><ErrorBox message={gateError} />
     <p><button className="btn" onClick={check}>Try again</button>{' '}<a className="btn secondary" href="/admin/login">Back to login</a></p>
     <p className="muted">If this keeps failing, the backend may be down. Signing in again will not help until it recovers.</p></div>);
-  return <Loading />;
+  return (<div><h1>Checking your account</h1><Loading /></div>);
 }

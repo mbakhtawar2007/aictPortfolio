@@ -9,7 +9,7 @@ function Counter({ value }: { value: number }) {
   const ref = useRef<HTMLSpanElement>(null); const [n, setN] = useState(0); const started = useRef(false);
   useEffect(() => {
     const el = ref.current; if (!el) return;
-    const obs = new IntersectionObserver((entries) => { if (entries[0].isIntersecting && !started.current) { started.current = true; const t0 = performance.now(); const tick = (t: number) => { const p = Math.min(1, (t - t0) / 800); setN(Math.round(value * p)); if (p < 1) requestAnimationFrame(tick); }; requestAnimationFrame(tick); } }, { threshold: 0.4 });
+    const obs = new IntersectionObserver((entries) => { if (entries[0].isIntersecting && !started.current) { started.current = true; if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.getAttribute('data-reduce') === 'true') { setN(value); return; } const t0 = performance.now(); const tick = (t: number) => { const p = Math.min(1, (t - t0) / 800); setN(Math.round(value * p)); if (p < 1) requestAnimationFrame(tick); }; requestAnimationFrame(tick); } }, { threshold: 0.4 });
     obs.observe(el); return () => obs.disconnect();
   }, [value]);
   return <span ref={ref} className="stat">{n}</span>;
@@ -41,17 +41,19 @@ export default function Home() {
       <h2>We create <span className="hero-words" aria-label="AI videos, AI tools, websites, stories"><span>AI videos</span><span>AI tools</span><span>websites</span><span>stories</span></span></h2>
       <p>{site?.tagline || 'Who we are, what we build, and what we have achieved.'}</p>
       <p><a className="btn" href="/team">Meet the Team</a> <a className="btn secondary" href="/projects">View Projects</a></p>
+      <div className="hero-scene" aria-hidden="true"><div className="hero-grid" /><span className="hero-chip hero-chip-a">AI</span><span className="hero-chip hero-chip-b">&lt;/&gt;</span><span className="hero-chip hero-chip-c">{'{}'}</span><span className="hero-chip hero-chip-d">01</span></div>
     </div>
+    {site?.hero_video_url && (<div style={{ marginTop: 24 }}><video controls src={site.hero_video_url} style={{ width: '100%', maxHeight: 420, objectFit: 'cover', borderRadius: 20 }} /></div>)}
     {siteError && (<div><ErrorBox message={siteError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">Site settings could not be loaded, so generic headings are shown. This is a failed request, not an empty site.</p></div>)}
-    <Section title="About / Mission"><p>{site?.mission || 'Mission content is managed in the admin dashboard.'}</p><p className="muted">{site?.about || ''}</p></Section>
+    <Section title="About"><p>{site?.mission || 'The group has not published a mission yet.'}</p><p className="muted">{site?.about || ''}</p></Section>
     <Section title="What We Do"><div className="grid">
-      {['AI Video Creation', 'AI Projects', 'Web Development', 'Creative Storytelling'].map((t) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">AI videos, AI tools and websites, presented as a team portfolio.</p></div>))}
+      {[['AI Video Creation', 'Short AI videos, showreels and visual stories made by the team.'], ['AI Projects', 'Practical AI tools and experiments, built and documented by members.'], ['Web Development', 'Websites and web apps, from design to a live, working product.'], ['Creative Storytelling', 'Ideas turned into stories told through video, visuals and words.']].map(([t, d]) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">{d}</p></div>))}
     </div></Section>
     <Section title="Meet the Team">{membersError ? (<div><ErrorBox message={membersError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="team-strip">
       {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}><span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span><h3><a href={`/team/${m.slug}`}>{m.full_name}</a> <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
-    </div><p><a href="/team">See the full team →</a></p></>)}</Section>
+    </div>{members.length > 3 && <p className="muted">Scroll sideways to see more members →</p>}<p><a href="/team">See the full team →</a></p></>)}</Section>
     <Section title="Featured Projects">{projectsError ? (<div><ErrorBox message={projectsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
-      {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a> <SampleBadge isSample={p.isSample} /></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}
+      {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a> <SampleBadge isSample={p.isSample} /></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
     </div>)}</Section>
     <Section title="Stats"><div className="grid">
       <div className="card">{membersError ? <span className="stat">—</span> : <Counter value={members.length} />}<p className="muted">Members{membersError ? ' (unavailable)' : ''}</p></div>
@@ -63,6 +65,6 @@ export default function Home() {
       {achievements.filter((a) => a.featured).map((a) => (<div className="card card-hover" key={a.id}><h3>{a.title} <SampleBadge isSample={a.isSample} /></h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p></div>))}
       {!achievements.filter((a) => a.featured).length && <Empty text="No featured achievements yet." />}
     </div>)}</Section>
-    <Section title="Contact"><p><a className="btn" href="/contact">Send a message</a> <a className="btn secondary" href="/team">Meet the team first</a></p><p className="muted">No public sign-up: accounts are created by an admin only.</p></Section>
+    <Section title="Contact"><p><a className="btn" href="/contact">Send a message</a> <a className="btn secondary" href="/team">Meet the team first</a></p><p className="muted">This site has no public sign-up.</p></Section>
   </div>);
 }

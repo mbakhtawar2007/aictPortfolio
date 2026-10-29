@@ -10,13 +10,13 @@ export default function ContactPage() {
     const r = await apiSend('/contact', 'POST', form);
     if (r.error) { setError(r.error.message); setState('error'); } else setState('done');
   }
-  if (state === 'done') return <div><h1>Message sent</h1><p className="success">Thanks — your message was received. (In demo mode it is stored in backend memory only; production requires Firebase — see README.)</p><p><a href="/">Back home</a></p></div>;
-  return (<div><h1>Contact</h1><p className="muted">Messages go to the admin inbox. There is no public account creation on this site.</p>
+  if (state === 'done') return <div><h1>Message sent</h1><p className="success">Thanks — your message was received.</p><p><button className="btn secondary" onClick={() => { setForm({ name: '', email: '', subject: '', message: '', website: '' }); setState('idle'); }}>Send another message</button>{' '}<a href="/">Back home</a></p></div>;
+  return (<div><h1>Contact</h1><p className="muted">Messages go to the group inbox. There is no public account creation on this site.</p>
     <form onSubmit={submit}>
-      <div className="float-label"><input required placeholder=" " aria-label="Name" value={form.name} onChange={set('name')} /><label>Name</label></div>
-      <div className="float-label"><input required type="email" placeholder=" " aria-label="Email" value={form.email} onChange={set('email')} /><label>Email</label></div>
-      <div className="float-label"><input placeholder=" " aria-label="Subject" value={form.subject} onChange={set('subject')} /><label>Subject</label></div>
-      <div className="float-label"><textarea required rows={6} placeholder=" " aria-label="Message" value={form.message} onChange={set('message')} /><label>Message</label></div>
+      <div className="float-label"><input required maxLength={200} placeholder=" " aria-label="Name" value={form.name} onChange={set('name')} /><label>Name</label></div>
+      <div className="float-label"><input required maxLength={200} type="email" placeholder=" " aria-label="Email" value={form.email} onChange={set('email')} /><label>Email</label></div>
+      <div className="float-label"><input maxLength={200} placeholder=" " aria-label="Subject" value={form.subject} onChange={set('subject')} /><label>Subject</label></div>
+      <div className="float-label"><textarea required maxLength={5000} rows={6} placeholder=" " aria-label="Message" value={form.message} onChange={set('message')} /><label>Message</label></div>
       {/* Honeypot: hidden from humans, filled by bots. Do not remove. */}
       <div style={{ display: 'none' }}><label>Website<input value={form.website} onChange={set('website')} tabIndex={-1} autoComplete="off" /></label></div>
       {state === 'error' && <p className="error">{error}</p>}

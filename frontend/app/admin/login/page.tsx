@@ -46,16 +46,18 @@ export default function AdminLogin() {
       window.location.href = '/dashboard';
     } catch (err) { setError(friendlyAuthError(err)); setBusy(false); }
   }
-  return (<div><h1>Admin login</h1>
+  const [showPw, setShowPw] = useState(false);
+  return (<div><h1>Sign in</h1>
     <p className="muted">Existing accounts only. There is no sign-up link, and no account can be created from this page. An admin must invite you first.</p>
     {!firebaseConfigured() && <p className="error">Firebase is not configured for this build (NEXT_PUBLIC_FIREBASE_* missing). Sign-in will fail until the site owner sets those public config values at Netlify build time. This is not a broken password — it is a missing configuration.</p>}
     <form onSubmit={submit}>
-      <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-      <label>Password<input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+      <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+      <label>Password<input required type={showPw ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+      <p><label><input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show password</label></p>
       {error && <p className="error">{error}</p>}
       <button className="btn" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       <p><button type="button" className="btn secondary small" disabled={forgotBusy} onClick={forgotPassword}>{forgotBusy ? 'Sending…' : 'Forgot password?'}</button></p>
       {resetNote && <p className="success">{resetNote}</p>}
     </form>
-    <p className="muted">Deactivated accounts are denied by the backend on every protected request, even with a token.</p></div>);
+    <p className="muted">If your account was deactivated, sign-in will not work — contact the admin.</p></div>);
 }

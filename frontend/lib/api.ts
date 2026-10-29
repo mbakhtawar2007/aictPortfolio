@@ -9,7 +9,7 @@ export async function apiGet<T>(path: string, auth = false): Promise<ApiResult<T
     if (auth) { const t = authToken(); if (t) headers.Authorization = `Bearer ${t}`; }
     const res = await fetch(`${API_URL}${path}`, { headers, cache: 'no-store' });
     return (await res.json()) as ApiResult<T>;
-  } catch { return { data: null, error: { code: 'network_error', message: 'Could not reach the backend. Check NEXT_PUBLIC_API_URL and that the backend is running.' }, meta: {} }; }
+  } catch { return { data: null, error: { code: 'network_error', message: 'Could not reach the server. Please try again in a moment.' }, meta: {} }; }
 }
 export async function apiSend<T>(path: string, method: string, body: unknown, auth = false): Promise<ApiResult<T>> {
   try {

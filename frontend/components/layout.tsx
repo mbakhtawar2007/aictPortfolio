@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { apiGet } from '../lib/api';
+import type { SiteSettings } from '../lib/types';
 
 function readTheme(): string { if (typeof window === 'undefined') return 'dark'; return window.localStorage.getItem('aict_theme') || 'dark'; }
 function readReduce(): boolean { if (typeof window === 'undefined') return false; return window.localStorage.getItem('aict_reduce') === 'true'; }
@@ -17,6 +19,8 @@ export function ReduceToggle() {
   return (<button className="btn secondary small" aria-pressed={reduce} onClick={toggle}>{reduce ? '✓ Effects reduced' : 'Reduce effects'}</button>);
 }
 export function Navbar() {
+  const [site, setSite] = useState<SiteSettings | null>(null);
+  useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error) setSite(r.data); }); }, []);
   const [open, setOpen] = useState(false);
   const burgerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -36,7 +40,7 @@ export function Navbar() {
   return (<header className="site-header">
     <div className="progress-bar" style={{ width: `${progress}%` }} aria-hidden="true" />
     <nav className="nav" aria-label="Main navigation">
-      <a className="brand" href="/">AICT</a>
+      {site?.logo_url ? <a href="/"><img src={site.logo_url} alt={site.group_name || 'AICT Group'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'AICT'}</a>}
       <span className="nav-links">{links.map(([href, label]) => (<a key={href} href={href}>{label}</a>))}</span>
       <span className="nav-actions"><ThemeToggle /><a href="/admin/login">Admin</a>
         <button ref={burgerRef} className="icon-btn nav-burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen(true)}>☰</button></span>
@@ -53,15 +57,16 @@ export function BackToTop() {
   const [show, setShow] = useState(false);
   useEffect(() => { const onScroll = () => setShow(window.scrollY > 600); window.addEventListener('scroll', onScroll, { passive: true }); return () => window.removeEventListener('scroll', onScroll); }, []);
   if (!show) return null;
-  return (<button className="back-to-top" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>↑ Top</button>);
+  return (<button className="back-to-top" aria-label="Back to top" onClick={() => { const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.getAttribute('data-reduce') === 'true'; window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' }); }}>↑ Top</button>);
 }
 export function Footer() {
+  const [siteName, setSiteName] = useState('AICT Group');
+  useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error && r.data?.group_name) setSiteName(r.data.group_name); }); }, []);
   const year = new Date().getFullYear();
-  const updated = new Date().toISOString().slice(0, 10);
   return (<footer>
-    <p><strong>AICT Group</strong> — homepage, team profiles, projects and achievements, managed through the admin dashboard. Group name, logo and brand are still open decisions; this UI stays generic until the group supplies them.</p>
+    <p><strong>{siteName}</strong> — homepage, team profiles, projects and achievements.</p>
     <p><a href="/">Home</a> · <a href="/team">Team</a> · <a href="/projects">Projects</a> · <a href="/achievements">Achievements</a> · <a href="/skills">Skills</a> · <a href="/contact">Contact</a></p>
-    <p className="muted">© {year} AICT Group · Last updated {updated} · No public sign-up: accounts are created by an admin only.</p>
+    <p className="muted">© {year} {siteName} · This site has no public sign-up.</p>
     <p><ReduceToggle /></p>
   </footer>);
 }

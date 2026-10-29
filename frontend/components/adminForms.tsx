@@ -52,13 +52,16 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     if (f.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(errText(f.contact_email))) errs.contact_email = 'Enter a valid email, or leave it blank.';
     setErrors(errs); if (Object.keys(errs).length) return;
     const body = { ...f, slug, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
+    if (!canSetLeader) delete (body as AnyObj).status;
     await saveForm(initial?.id ? `/admin/members/${initial.id}` : '/admin/members', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
   if (isCreate && !showAll) return (<form onSubmit={submit}>
     <p className="muted">{selfCreate ? 'You are creating your own profile. It will be saved as a draft, and an admin will review and publish it.' : 'Only these three things are needed to create a member. Everything else — photo, bio, skills, education, experience, links — can be added later by editing this member.'}</p>
     <Text label="Full name *" value={errText(f.full_name)} onChange={(v) => set('full_name', v)} error={errors.full_name} />
-    <Text label="Role" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} placeholder="e.g. AI Developer" />
+    <Text label="Role title" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} placeholder="e.g. AI Developer" />
     <Text label="Email" type="email" value={errText(f.contact_email)} onChange={(v) => set('contact_email', v)} error={errors.contact_email} />
+    <p className="muted">Email stays private unless 'Contact email is public' is ticked when editing.</p>
+    {canSetLeader && <><Check label="Publish immediately" value={errText(f.status) === 'published'} onChange={(v) => set('status', v ? 'published' : 'draft')} /><p className="muted">Without this, the member is saved as a draft for later.</p></>}
     {errors.slug && <p className="error">{errors.slug}</p>}
     <p><button className="btn" disabled={busy}>{busy ? <><span className="spinner" /> Saving…</> : selfCreate ? 'Create my profile' : 'Create member'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
     <p><button type="button" className="btn secondary small" onClick={() => setShowAll(true)}>Add all details now instead</button></p>
@@ -69,14 +72,16 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     <section className="form-section"><h3>Basics</h3><p className="muted">Only name and web address are required. Everything else can be added later.</p>
     <Text label="Full name *" value={errText(f.full_name)} onChange={(v) => { set('full_name', v); if (!errText(f.slug)) set('slug', slugify(v)); }} error={errors.full_name} />
     <Text label="Web address (slug) *" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} placeholder="e.g. ayesha-khan — this becomes /team/ayesha-khan" />
+    <p className="muted">Changing this breaks previously shared links to this profile.</p>
     <Text label="Role title" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} placeholder="e.g. AI Developer" />
     <Text label="Short intro" value={errText(f.short_intro)} onChange={(v) => set('short_intro', v)} />
     <Area label="Bio" value={errText(f.bio)} onChange={(v) => set('bio', v)} rows={6} />
-    {!selfCreate && <><Select label="Visibility" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
+    {canSetLeader && <><Select label="Visibility" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
+    {!selfCreate && !canSetLeader && <p className="muted">Only an admin can publish — this stays a draft until an admin publishes it.</p>}
     {canSetLeader && <><Check label="Group leader" value={Boolean(f.is_leader)} onChange={(v) => set('is_leader', v)} /><p className="muted">Only one member can be the group leader. Choosing this removes it from anyone else.</p></>}
     <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} placeholder="Lower numbers appear first" /></section>
     <section className="form-section"><h3>Photo & resume</h3><p className="muted">Upload first in Photos &amp; files, then paste the URL here.</p>
-    <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a URL from the Photos & files tab" />
+    <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a URL from Uploads (admin page) or your uploads section" />
     <Text label="Cover URL" value={errText(f.cover_url)} onChange={(v) => set('cover_url', v)} />
     <Text label="Resume URL (PDF)" value={errText(f.resume_path)} onChange={(v) => set('resume_path', v)} />
     <Check label="Resume is public" value={Boolean(f.resume_is_public)} onChange={(v) => set('resume_is_public', v)} /></section>
@@ -113,7 +118,7 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
   </form>);
 }
 
-export function ProjectForm({ initial, members, onSaved, onCancel, push }: { initial: Partial<Project> | null; members: Member[]; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void }) {
+export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin }: { initial: Partial<Project> | null; members: Member[]; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void; isAdmin?: boolean }) {
   // Audit fix (data-integrity review): legacy/demo projects may carry only
   // member_ids with no project_members. Without this, opening such a project
   // and saving would send member_ids: [] and silently drop all assignments.
@@ -134,6 +139,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
     // Blank year must be sent as null (not undefined, which JSON drops)
     // so the backend can delete the field instead of keeping the old year.
     const body = { ...f, year: (f.year === '' || f.year === null || f.year === undefined) ? null : Number(f.year), sort_order: Number(f.sort_order) || 0, member_ids: pm.map((x) => x.member_id), project_members: pm };
+    if (!isAdmin) delete (body as AnyObj).status;
     await saveForm(initial?.id ? `/admin/projects/${initial.id}` : '/admin/projects', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
   const assignments = (f.project_members as AnyObj[]) || [];
@@ -152,9 +158,10 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
     <Text label="Repo URL" value={errText(f.repo_url)} onChange={(v) => set('repo_url', v)} />
     <Text label="Live URL" value={errText(f.live_url)} onChange={(v) => set('live_url', v)} />
     <Text label="Year (leave blank to clear)" type="number" value={f.year === null || f.year === undefined ? '' : String(f.year)} onChange={(v) => set('year', v)} />
-    <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} />
-    <Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} />
-    <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} />
+    <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} /><p className="muted">Featured projects are highlighted on the homepage.</p>
+    {isAdmin && <><Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
+    {!isAdmin && <p className="muted">As a member, this project is saved as a draft for an admin to review. It will not be public until an admin publishes it.</p>}
+    <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} /><p className="muted">Lower numbers appear first in lists.</p>
     </section>
     <section className="form-section"><h3>Team</h3><p className="muted">Choose who worked on this project, and what each person did.</p>
     <h3>Assigned members</h3>

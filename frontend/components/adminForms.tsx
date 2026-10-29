@@ -37,16 +37,33 @@ async function saveForm(path: string, method: string, body: unknown, push: (k: '
 export function MemberForm({ initial, onSaved, onCancel, push, selfCreate }: { initial: Partial<Member> | null; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void; selfCreate?: boolean }) {
   const [f, setF] = useState<AnyObj>({ slug: '', full_name: '', role_title: '', short_intro: '', bio: '', photo_url: '', cover_url: '', location: '', availability: '', resume_path: '', resume_is_public: false, contact_email: '', contact_email_is_public: false, status: 'draft', sort_order: 0, skills: [], education: [], experience: [], links: [], ...(initial || {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
+  const isCreate = !initial?.id;
+  // Minimal-create (2026-10-29): creating a member used to show the whole
+  // profile form (photo, skills, education, experience, links). On create
+  // only name, role and email are asked; everything else is added later
+  // via Edit. Editing an existing member still shows the full form.
+  const [showAll, setShowAll] = useState(!isCreate);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); const errs: Record<string, string> = {};
-    if (!errText(f.slug).trim()) errs.slug = 'Slug is required.';
+    const slug = errText(f.slug).trim() || slugify(errText(f.full_name));
+    if (!slug) errs.slug = 'Slug is required.';
     if (!errText(f.full_name).trim()) errs.full_name = 'Full name is required.';
     if (f.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(errText(f.contact_email))) errs.contact_email = 'Enter a valid email, or leave it blank.';
     setErrors(errs); if (Object.keys(errs).length) return;
-    const body = { ...f, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
+    const body = { ...f, slug, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
     await saveForm(initial?.id ? `/admin/members/${initial.id}` : '/admin/members', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
+  if (isCreate && !showAll) return (<form onSubmit={submit}>
+    <p className="muted">{selfCreate ? 'You are creating your own profile. It will be saved as a draft, and an admin will review and publish it.' : 'Only these three things are needed to create a member. Everything else — photo, bio, skills, education, experience, links — can be added later by editing this member.'}</p>
+    <Text label="Full name *" value={errText(f.full_name)} onChange={(v) => set('full_name', v)} error={errors.full_name} />
+    <Text label="Role" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} placeholder="e.g. AI Developer" />
+    <Text label="Email" type="email" value={errText(f.contact_email)} onChange={(v) => set('contact_email', v)} error={errors.contact_email} />
+    {errors.slug && <p className="error">{errors.slug}</p>}
+    <p><button className="btn" disabled={busy}>{busy ? <><span className="spinner" /> Saving…</> : selfCreate ? 'Create my profile' : 'Create member'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
+    <p><button type="button" className="btn secondary small" onClick={() => setShowAll(true)}>Add all details now instead</button></p>
+    <p className="muted">The web address is made automatically from the name (e.g. /team/ayesha-khan). The member is saved as a draft until an admin publishes it.</p>
+  </form>);
   return (<form onSubmit={submit}>
     {selfCreate && <p className="muted">You are creating your own profile. It will be saved as a draft, and an admin will review and publish it. You do not need to fill everything — name and web address are enough to start.</p>}
     <section className="form-section"><h3>Basics</h3><p className="muted">Only name and web address are required. Everything else can be added later.</p>

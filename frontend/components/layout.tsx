@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
+import { sampleSite } from '../lib/sample';
 import type { SiteSettings } from '../lib/types';
 
 function readTheme(): string { if (typeof window === 'undefined') return 'dark'; return window.localStorage.getItem('aict_theme') || 'dark'; }
@@ -20,7 +21,7 @@ export function ReduceToggle() {
 }
 export function Navbar() {
   const [site, setSite] = useState<SiteSettings | null>(null);
-  useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error) setSite(r.data); }); }, []);
+  useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error) setSite(r.data || sampleSite); }); }, []);
   const [open, setOpen] = useState(false);
   const burgerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -42,13 +43,12 @@ export function Navbar() {
     <nav className="nav" aria-label="Main navigation">
       {site?.logo_url ? <a href="/"><img src={site.logo_url} alt={site.group_name || 'AICT Group'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'AICT'}</a>}
       <span className="nav-links">{links.map(([href, label]) => (<a key={href} href={href}>{label}</a>))}</span>
-      <span className="nav-actions"><ThemeToggle /><a href="/admin/login">Admin</a>
+      <span className="nav-actions"><ThemeToggle />
         <button ref={burgerRef} className="icon-btn nav-burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen(true)}>☰</button></span>
     </nav>
     {open && (<div className="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu">
       <button ref={closeRef} className="icon-btn mobile-close" aria-label="Close menu" onClick={() => { setOpen(false); burgerRef.current?.focus(); }}>×</button>
       {links.map(([href, label]) => (<a key={href} href={href} onClick={() => setOpen(false)}>{label}</a>))}
-      <a href="/admin/login" onClick={() => setOpen(false)}>Admin</a>
       <a className="btn" href="/contact" onClick={() => setOpen(false)}>Contact</a>
     </div>)}
   </header>);
@@ -66,7 +66,7 @@ export function Footer() {
   return (<footer>
     <p><strong>{siteName}</strong> — homepage, team profiles, projects and achievements.</p>
     <p><a href="/">Home</a> · <a href="/team">Team</a> · <a href="/projects">Projects</a> · <a href="/achievements">Achievements</a> · <a href="/skills">Skills</a> · <a href="/contact">Contact</a></p>
-    <p className="muted">© {year} {siteName} · This site has no public sign-up.</p>
+    <p className="muted">© {year} {siteName}</p>
     <p><ReduceToggle /></p>
   </footer>);
 }

@@ -93,3 +93,19 @@ test('detail pages fall back to demo records for demo slugs', () => {
   assert.match(read('app/team/[slug]/detail.tsx'), /sampleMembers\.find/);
   assert.match(read('app/projects/[slug]/detail.tsx'), /sampleProjects\.find/);
 });
+
+test('cleanup: no Admin link in public layout, no dead team-strip CSS, shared demo fallback used', () => {
+  const layout = read('components/layout.tsx');
+  assert.ok(!/\/admin\/login/.test(layout), 'public header must not link to admin login');
+  assert.ok(!/team-strip/.test(read('styles/globals.css')), 'dead team-strip CSS removed');
+  assert.match(read('lib/sample.ts'), /export function orDemo/);
+  for (const f of ['app/team/page.tsx', 'app/projects/page.tsx', 'app/achievements/page.tsx', 'app/skills/page.tsx']) {
+    assert.match(read(f), /orDemo\(/);
+  }
+});
+test('cleanup: no unused Loading/SampleBadge imports in public list pages', () => {
+  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'app/achievements/page.tsx']) {
+    assert.ok(!/\bLoading\b/.test(read(f).replace(/loading/g, '')), f + ' must not import unused Loading');
+  }
+  assert.ok(!/SampleBadge/.test(read('app/skills/page.tsx')));
+});

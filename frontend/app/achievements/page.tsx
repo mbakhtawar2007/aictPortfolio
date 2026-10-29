@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import { apiGet } from '../../lib/api';
 import type { Achievement } from '../../lib/types';
 import { fmtDate } from '../shared';
-import { Loading, Empty, ErrorBox, SampleBadge } from '../shared';
+import { Empty, ErrorBox, SampleBadge } from '../shared';
 import { SkeletonGrid, Tabs } from '../../components/ui';
-import { sampleAchievements } from '../../lib/sample';
+import { sampleAchievements, orDemo } from '../../lib/sample';
 const TYPES = ['All', 'certificate', 'award', 'competition', 'academic'];
 export default function AchievementsPage() {
   const [items, setItems] = useState<Achievement[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [type, setType] = useState('All');
-  const load = () => { setLoading(true); setError(''); apiGet<Achievement[]>('/achievements').then((r) => { if (r.error) setError(r.error.message); else setItems(r.data && r.data.length ? r.data : sampleAchievements); setLoading(false); }); };
+  const load = () => { setLoading(true); setError(''); apiGet<Achievement[]>('/achievements').then((r) => { if (r.error) setError(r.error.message); else setItems(orDemo(r.data, sampleAchievements)); setLoading(false); }); };
   useEffect(load, []);
   const filtered = items.filter((a) => type === 'All' || a.type === type);
   if (loading) return <SkeletonGrid />;

@@ -1,3 +1,9 @@
+// Returns the live list when it has records, otherwise the demo list.
+// One helper instead of the same ternary copied across every public page.
+export function orDemo<T>(data: T[] | null | undefined, demo: T[]): T[] {
+  return data && data.length ? data : demo;
+}
+
 // Demo profiles shown on PUBLIC pages only, and only while the live
 // database has no real content yet. This is display fallback, not stored
 // data: nothing here is written to Firestore, the admin dashboard still

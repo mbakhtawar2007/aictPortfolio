@@ -2,14 +2,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../../lib/api';
 import type { Project } from '../../lib/types';
-import { Loading, Empty, ErrorBox, SampleBadge } from '../shared';
+import { Empty, ErrorBox, SampleBadge } from '../shared';
 import { SkeletonGrid, Tabs } from '../../components/ui';
-import { sampleProjects } from '../../lib/sample';
+import { sampleProjects, orDemo } from '../../lib/sample';
 const CATS = ['All', 'AI Video', 'AI Tool', 'Website', 'Other'];
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState('All'); const [q, setQ] = useState('');
-  const load = () => { setLoading(true); setError(''); apiGet<Project[]>('/projects').then((r) => { if (r.error) setError(r.error.message); else setProjects(r.data && r.data.length ? r.data : sampleProjects); setLoading(false); }); };
+  const load = () => { setLoading(true); setError(''); apiGet<Project[]>('/projects').then((r) => { if (r.error) setError(r.error.message); else setProjects(orDemo(r.data, sampleProjects)); setLoading(false); }); };
   useEffect(load, []);
   const filtered = useMemo(() => projects.filter((p) => (cat === 'All' || p.category === cat) && (`${p.title} ${(p.tech_stack || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()))), [projects, cat, q]);
   if (loading) return <SkeletonGrid />;

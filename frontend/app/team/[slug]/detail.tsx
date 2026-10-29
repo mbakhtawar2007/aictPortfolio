@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import type { Member, Project, Achievement } from '../../../lib/types';
-import { Loading, ErrorBox, SampleBadge, fmtDate } from '../../shared';
-import { sampleMembers, sampleProjects, sampleAchievements } from '../../../lib/sample';
+import { ErrorBox, SampleBadge, fmtDate } from '../../shared';
+import { sampleMembers, sampleProjects, sampleAchievements, orDemo } from '../../../lib/sample';
 import { Modal, CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function MemberDetail({ slug }: { slug: string }) {
   const [m, setM] = useState<Member | null>(null); const [projects, setProjects] = useState<Project[]>([]);
@@ -23,9 +23,9 @@ export default function MemberDetail({ slug }: { slug: string }) {
       const [r, p, ms, a] = await Promise.all([apiGet<Member>(`/members/${actualSlug}`), apiGet<Project[]>('/projects'), apiGet<Member[]>('/members'), apiGet<Achievement[]>('/achievements')]);
       const member = (!r.error && r.data) ? r.data : sampleMembers.find((x) => x.slug === actualSlug) || null;
       if (!member) setError(r.error ? r.error.message : 'Member not found.'); else setM(member);
-      const effProjects = p.data && p.data.length ? p.data : sampleProjects;
-      const effMembers = ms.data && ms.data.length ? ms.data : sampleMembers;
-      const effAchievements = a.data && a.data.length ? a.data : sampleAchievements;
+      const effProjects = orDemo(p.data, sampleProjects);
+      const effMembers = orDemo(ms.data, sampleMembers);
+      const effAchievements = orDemo(a.data, sampleAchievements);
       setProjects(effProjects.filter((x) => (x.member_ids || []).includes(member?.id || '')));
       setAllMembers(effMembers); setAchievements(effAchievements.filter((x) => x.member_id === member?.id));
       setLoading(false);

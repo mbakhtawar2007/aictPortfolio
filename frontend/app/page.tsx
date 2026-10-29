@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
 import type { Member, Project, Achievement, SiteSettings } from '../lib/types';
-import { Loading, Empty, ErrorBox, SampleBadge, Section } from './shared';
-import { sampleMembers, sampleProjects, sampleAchievements, sampleSite } from '../lib/sample';
+import { Empty, ErrorBox, SampleBadge, Section } from './shared';
+import { sampleMembers, sampleProjects, sampleAchievements, sampleSite, orDemo } from '../lib/sample';
 import { SkeletonGrid } from '../components/ui';
 
 function Counter({ value }: { value: number }) {
@@ -27,9 +27,9 @@ export default function Home() {
     setLoading(true); setSiteError(''); setMembersError(''); setProjectsError(''); setAchievementsError('');
     const [s, m, p, a] = await Promise.all([apiGet<SiteSettings>('/site'), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects'), apiGet<Achievement[]>('/achievements')]);
     if (s.error) setSiteError(s.error.message); else setSite(s.data || sampleSite);
-    if (m.error) setMembersError(m.error.message); else setMembers(m.data && m.data.length ? m.data : sampleMembers);
-    if (p.error) setProjectsError(p.error.message); else setProjects(p.data && p.data.length ? p.data : sampleProjects);
-    if (a.error) setAchievementsError(a.error.message); else setAchievements(a.data && a.data.length ? a.data : sampleAchievements);
+    if (m.error) setMembersError(m.error.message); else setMembers(orDemo(m.data, sampleMembers));
+    if (p.error) setProjectsError(p.error.message); else setProjects(orDemo(p.data, sampleProjects));
+    if (a.error) setAchievementsError(a.error.message); else setAchievements(orDemo(a.data, sampleAchievements));
     setLoading(false);
   };
   useEffect(() => { load(); }, []);

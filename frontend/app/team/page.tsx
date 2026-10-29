@@ -2,13 +2,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../../lib/api';
 import type { Member } from '../../lib/types';
-import { Loading, Empty, ErrorBox, SampleBadge } from '../shared';
+import { Empty, ErrorBox, SampleBadge } from '../shared';
 import { SkeletonGrid } from '../../components/ui';
-import { sampleMembers } from '../../lib/sample';
+import { sampleMembers, orDemo } from '../../lib/sample';
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
   const [q, setQ] = useState(''); const [role, setRole] = useState('All');
-  const load = () => { setLoading(true); setError(''); apiGet<Member[]>('/members').then((r) => { if (r.error) setError(r.error.message); else setMembers(r.data && r.data.length ? r.data : sampleMembers); setLoading(false); }); };
+  const load = () => { setLoading(true); setError(''); apiGet<Member[]>('/members').then((r) => { if (r.error) setError(r.error.message); else setMembers(orDemo(r.data, sampleMembers)); setLoading(false); }); };
   useEffect(load, []);
   const roles = useMemo(() => ['All', ...Array.from(new Set(members.map((m) => m.role_title || '').filter(Boolean)))], [members]);
   const filtered = members.filter((m) => (role === 'All' || m.role_title === role) && (`${m.full_name} ${(m.skills || []).map((s) => s.name).join(' ')}`.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => Number(b.is_leader || false) - Number(a.is_leader || false));

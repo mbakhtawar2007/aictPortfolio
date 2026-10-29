@@ -2,7 +2,13 @@
   "name": "aict-group-portfolio-frontend",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "dev": "next dev", "build": "next build", "start": "next start" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test tests/static.test.js",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "firebase": "^12.0.0",
     "next": "^16.0.0",

@@ -12,6 +12,13 @@ h1, h2, h3 { font-family: 'Space Grotesk', Sora, system-ui, sans-serif; line-hei
 a { color: var(--link); }
 button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
 button { min-height: 44px; }
+/* Skip link: visually hidden until focused, then clearly visible. */
+.skip-link { position: absolute; left: -9999px; top: 0; background: var(--bg); color: var(--text); padding: 12px 18px; border: 2px solid var(--cyan); border-radius: 12px; z-index: 200; }
+.skip-link:focus, .skip-link:focus-visible { left: 16px; top: 16px; }
+/* Long unbroken strings (emails, URLs, IDs, Cloudinary public_ids) must
+   wrap instead of overflowing cards at 320px. */
+.card, .heat-cell, .toast, .stat-card, .form-section, footer p { overflow-wrap: anywhere; word-break: break-word; }
+a { overflow-wrap: anywhere; }
 :focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; border-radius: 8px; }
 .site-header { position: sticky; top: 0; z-index: 20; }
 .progress-bar { height: 3px; background: linear-gradient(90deg, var(--blue), var(--violet), var(--cyan)); transition: width 0.1s linear; }
@@ -42,7 +49,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
 .btn:active { transform: scale(0.96); }
 .btn.secondary { background: transparent; color: var(--text); }
 .btn.danger { background: #b91c1c; border-color: #b91c1c; }
-.btn.small { padding: 6px 12px; font-size: 13px; min-height: 36px; }
+.btn.small { padding: 12px 14px; font-size: 13px; min-height: 44px; }
 .btn:disabled { opacity: 0.6; cursor: wait; }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -77,9 +84,9 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 @keyframes shimmer { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 .modal-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.6); display: flex; align-items: flex-end; justify-content: center; padding: 16px; animation: fadeIn 0.2s ease; }
 .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 20px 20px 0 0; width: min(720px, 100%); max-height: 88vh; overflow: auto; padding: 20px; animation: riseIn 0.25s ease; }
-.modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--bg); z-index: 2; padding: 4px 0 12px; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 2px solid var(--border); padding-bottom: 0; margin-bottom: 20px; }
-.tab-btn { background: none; border: none; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; padding: 8px 10px; font-size: 15px; margin-bottom: -2px; }
+.tab-btn { background: none; border: none; border-bottom: 3px solid transparent; color: var(--muted); cursor: pointer; padding: 10px 10px; font-size: 15px; margin-bottom: -2px; min-height: 44px; }
 .tab-btn.active { color: var(--text); border-bottom-color: var(--violet); }
 .tab-btn:hover { color: var(--text); }
 .team-strip { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x mandatory; }

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiSend } from '../../lib/api';
 import type { Member, Project, Achievement, ContactMessage, SiteSettings, UserRole, AuditEntry, Revision, MediaItem } from '../../lib/types';
 import { Loading, ErrorBox, SampleBadge } from '../shared';
@@ -24,7 +24,20 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<UserRole[]>([]); const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]); const [revisions, setRevisions] = useState<Revision[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]); const [mediaError, setMediaError] = useState('');
-  const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [tab, setTab] = useState<Tab>('overview');
+  const [loading, setLoading] = useState(true); const [tab, setTab] = useState<Tab>('overview');
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
+  const [gateError, setGateError] = useState('');
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const allTabs = NAV_GROUPS.flatMap((g) => g.tabs);
+  const onTabKey = (e: React.KeyboardEvent, id: Tab) => {
+    const idx = allTabs.findIndex((x) => x.id === id); let next: number | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % allTabs.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + allTabs.length) % allTabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = allTabs.length - 1;
+    if (next !== null) { e.preventDefault(); tabRefs.current[allTabs[next].id]?.focus(); }
+  };
   const [editingMember, setEditingMember] = useState<Partial<Member> | null | undefined>(undefined);
   const [selfCreate, setSelfCreate] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null | undefined>(undefined);
@@ -40,24 +53,33 @@ export default function AdminDashboard() {
 
   useEffect(() => { setToken(window.localStorage.getItem('aict_admin_token')); }, []);
   const reload = useCallback(async () => {
+    setGateError(''); setSectionErrors({});
     // Members do not see this page at all — send them to their own page.
+    // A network/backend failure on /admin/me is NOT a logout: show a
+    // retryable gate error instead of redirecting or falsely gating tabs.
     const me = await apiGet<{ role: string }>('/admin/me', true);
     if (me.data?.role === 'member') { window.location.href = '/member'; return; }
+    if (me.error) {
+      if (me.error.code === 'unauthenticated') { window.location.href = '/admin/login'; return; }
+      setGateError(me.error.message); setLoading(false); return;
+    }
+    setIsAdmin(me.data?.role === 'admin');
     const [m, p, a, msg, u, s, au, rev, med] = await Promise.all([
       apiGet<Member[]>('/admin/members', true), apiGet<Project[]>('/admin/projects', true), apiGet<Achievement[]>('/admin/achievements', true),
       apiGet<ContactMessage[]>('/admin/messages', true), apiGet<UserRole[]>('/admin/users', true), apiGet<SiteSettings>('/admin/settings', true),
       apiGet<AuditEntry[]>('/admin/audit?limit=50', true), apiGet<Revision[]>('/admin/revisions', true), apiGet<MediaItem[]>('/admin/media', true),
     ]);
-    if (m.error) setError(m.error.message); else setMembers(m.data || []);
-    if (p.data) setProjects(p.data);
-    if (a.data) setAchievements(a.data);
-    if (msg.data) setMessages(msg.data);
-    if (u.data) setUsers(u.data);
-    if (s.data) setSettings(s.data);
-    if (au.data) setAudit(au.data);
-    if (rev.data) setRevisions(rev.data);
-    if (med.data) { setMedia(med.data); setMediaError(''); } else if (med.error) setMediaError(med.error.message);
-    setIsAdmin(Boolean(s.data || u.data));
+    const errs: Record<string, string> = {};
+    if (m.error) errs.members = m.error.message; else setMembers(m.data || []);
+    if (p.error) errs.projects = p.error.message; else setProjects(p.data || []);
+    if (a.error) errs.achievements = a.error.message; else setAchievements(a.data || []);
+    if (msg.error) errs.messages = msg.error.message; else setMessages(msg.data || []);
+    if (u.error) errs.users = u.error.message; else setUsers(u.data || []);
+    if (s.error) errs.settings = s.error.message; else setSettings(s.data);
+    if (au.error) errs.audit = au.error.message; else setAudit(au.data || []);
+    if (rev.error) errs.revisions = rev.error.message; else setRevisions(rev.data || []);
+    if (med.data) { setMedia(med.data); setMediaError(''); } else if (med.error) { errs.media = med.error.message; setMediaError(med.error.message); }
+    setSectionErrors(errs);
     setLoading(false);
   }, []);
   useEffect(() => { if (token) reload(); else setLoading(false); }, [token, reload]);
@@ -89,6 +111,9 @@ export default function AdminDashboard() {
     setInvite({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); reload();
   }
   async function userAction(id: string, kind: string, body?: unknown, email?: string) {
+    const key = `user-${id}-${kind}`;
+    if (pending[key]) return; setPending((x) => ({ ...x, [key]: true }));
+    try {
     const path = kind === 'resend' ? `/admin/users/${id}/resend-invite` : kind === 'revoke' ? `/admin/users/${id}/revoke-invite` : `/admin/users/${id}`;
     const r = await apiSend(path, kind === 'resend' || kind === 'revoke' ? 'POST' : 'PATCH', body || {}, true);
     if (r.error) { push('error', r.error.message); return; }
@@ -100,20 +125,30 @@ export default function AdminDashboard() {
       catch (e) { push('error', `Invitation renewed, but the password email could not be sent: ${e instanceof Error ? e.message : 'unknown error'}`); }
     } else push('success', 'Account updated.');
     reload();
+    } finally { setPending((x) => ({ ...x, [key]: false })); }
   }
   async function setAccountPassword(id: string) {
     const pw = passwordDraft[id] || '';
     if (pw.length < 6) { push('error', 'Password must be at least 6 characters.'); return; }
+    const key = `pw-${id}`; if (pending[key]) return; setPending((x) => ({ ...x, [key]: true }));
+    try {
     const r = await apiSend(`/admin/users/${id}/set-password`, 'POST', { password: pw }, true);
     if (r.error) push('error', r.error.message); else { push('success', 'Password set. Share it privately with this person — it will not be shown again.'); setPasswordDraft({ ...passwordDraft, [id]: '' }); reload(); }
+    } finally { setPending((x) => ({ ...x, [key]: false })); }
   }
   async function messageAction(id: string, read: boolean) {
+    const key = `msg-${id}`; if (pending[key]) return; setPending((x) => ({ ...x, [key]: true }));
+    try {
     const r = await apiSend(`/admin/messages/${id}`, 'PATCH', { read }, true);
     if (r.error) push('error', r.error.message); else reload();
+    } finally { setPending((x) => ({ ...x, [key]: false })); }
   }
   async function restoreRevision(id: string) {
+    const key = `rev-${id}`; if (pending[key]) return; setPending((x) => ({ ...x, [key]: true }));
+    try {
     const r = await apiSend(`/admin/revisions/${id}/restore`, 'POST', {}, true);
     if (r.error) push('error', r.error.message); else { push('success', 'Revision restored. Visitors will see it on their next page load — no rebuild needed.'); reload(); }
+    } finally { setPending((x) => ({ ...x, [key]: false })); }
   }
   async function upload(e: React.FormEvent) {
     e.preventDefault(); if (!uploadFile) { push('error', 'Choose a file first.'); return; }
@@ -130,13 +165,14 @@ export default function AdminDashboard() {
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };
-    xhr.onload = () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { setUploadUrl(j.secure_url); push('success', 'Upload complete. Copy the URL into a member or project form.'); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
+    xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const v = await apiSend('/admin/upload/verify', 'POST', { public_id: String(d.public_id), file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } setUploadUrl(String((v.data as Record<string, unknown>).secure_url || j.secure_url)); push('success', 'Upload complete and verified by the server. Copy the URL into a member or project form.'); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
     xhr.onerror = () => { setUploadBusy(false); push('error', 'Upload failed (network).'); };
     xhr.open('POST', endpoint); xhr.send(form);
   }
 
   if (loading) return <Loading />;
   if (!token) return (<div><h1>Admin dashboard</h1><p className="error">Sign-in required. <a href="/admin/login">Go to admin login</a></p><p className="muted">There is no sign-up on this site. An admin must invite you first.</p></div>);
+  if (gateError) return (<div><h1>Admin dashboard</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={reload}>Try again</button>{' '}<button className="btn secondary" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out — retry once the backend recovers.</p></div>);
   const unread = messages.filter((m) => !m.read).length;
   const filteredMembers = members.filter((m) => (m.full_name + ' ' + (m.role_title || '')).toLowerCase().includes(memberQuery.toLowerCase()));
   const filteredProjects = projects.filter((p) => (p.title + ' ' + (p.category || '')).toLowerCase().includes(projectQuery.toLowerCase()));
@@ -144,10 +180,11 @@ export default function AdminDashboard() {
   const needsProfile = !isAdmin && members.length === 0;
   const openSelfCreate = () => { setSelfCreate(true); setEditingMember({}); };
   return (<div><h1>Admin dashboard</h1>
-    {error && <ErrorBox message={error} />}
     <p className="muted">Signed in as {isAdmin ? 'admin' : 'team member'}. Admins can edit everything. Team members can only edit their own profile and projects they are assigned to.</p>
-    <nav className="admin-nav" aria-label="Admin sections">{NAV_GROUPS.map((g) => (<div className="admin-nav-group" key={g.label}><span className="admin-nav-label">{g.label}</span><div className="tabs admin-tabs">{g.tabs.map((t) => (<button key={t.id} role="tab" aria-selected={tab === t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>{t.label}{t.id === 'messages' && unread > 0 ? ` (${unread})` : ''}</button>))}</div></div>))}
+    <nav className="admin-nav" aria-label="Admin sections">{NAV_GROUPS.map((g) => (<div className="admin-nav-group" key={g.label}><span className="admin-nav-label">{g.label}</span><div className="tabs admin-tabs" role="tablist" aria-label={`${g.label} sections`}>{g.tabs.map((t) => (<button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} id={`admin-tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls="admin-panel" tabIndex={tab === t.id ? 0 : -1} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} onKeyDown={(e) => onTabKey(e, t.id)}>{t.label}{t.id === 'messages' && unread > 0 ? ` (${unread})` : ''}</button>))}</div></div>))}
       <button className="btn secondary small" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></nav>
+    {Object.keys(sectionErrors).length > 0 && (<div><ErrorBox message={`Some sections could not be loaded: ${Object.entries(sectionErrors).map(([k, v]) => `${k} — ${v}`).join('; ')}`} /><p><button className="btn secondary" onClick={reload}>Try loading again</button></p><p className="muted">Sections that failed are not empty — their data simply did not arrive. Other sections still show their data.</p></div>)}
+    <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`}>
 
     {tab === 'overview' && (<div>
       {needsProfile && (<div className="card"><h2>You don't have a profile yet</h2><p>Create your team profile here. It will be saved as a draft, and an admin will review and publish it.</p><p><button className="btn" onClick={openSelfCreate}>Create my profile</button></p></div>)}
@@ -175,21 +212,21 @@ export default function AdminDashboard() {
       <p className="muted">A team profile is what visitors see. A sign-in account is separate — link the two in Team accounts so a member can edit their own profile.</p>
       {needsProfile && (<div className="card"><h2>You don't have a profile yet</h2><p>Create your team profile here. It will be saved as a draft, and an admin will review and publish it.</p><p><button className="btn" onClick={openSelfCreate}>Create my profile</button></p></div>)}
       {isAdmin && <p><button className="btn" onClick={() => { setSelfCreate(false); setEditingMember({}); }}>+ New member</button></p>}
-      <p><input className="search-input" placeholder="Search team members…" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} /></p>
+      <p><input className="search-input" aria-label="Search team members" placeholder="Search team members…" value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} /></p>
       <div className="grid">{filteredMembers.map((m) => (<div className="card" key={m.id}><h3>{m.full_name} <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title} · <span className={`status-chip ${m.status}`}>{m.status === 'published' ? 'Published' : 'Draft'}</span></p><p><button className="btn secondary small" onClick={() => { setSelfCreate(false); setEditingMember(m); }}>Edit</button>{' '}{isAdmin && <button className="btn secondary small" onClick={() => setDeleting({ kind: 'member', id: m.id, label: m.full_name })}>Delete</button>}</p></div>))}</div>
-      {!filteredMembers.length && <p className="muted">{memberQuery ? 'No team members match that search.' : 'No team members yet.'} {isAdmin && <button className="btn secondary small" onClick={() => { setSelfCreate(false); setEditingMember({}); }}>Add the first member</button>}</p>}
+      {!filteredMembers.length && !sectionErrors.members && <p className="muted">{memberQuery ? 'No team members match that search.' : 'No team members yet.'} {isAdmin && <button className="btn secondary small" onClick={() => { setSelfCreate(false); setEditingMember({}); }}>Add the first member</button>}</p>}
       {editingMember !== undefined && (<Modal title={selfCreate ? 'Create my profile' : editingMember?.id ? 'Edit member' : 'New member'} onClose={() => { setEditingMember(undefined); setSelfCreate(false); }}><MemberForm initial={editingMember} selfCreate={selfCreate} onSaved={() => { setEditingMember(undefined); setSelfCreate(false); reload(); }} onCancel={() => { setEditingMember(undefined); setSelfCreate(false); }} push={push} /></Modal>)}</div>)}
 
     {tab === 'projects' && (<div><p>{isAdmin && <button className="btn" onClick={() => setEditingProject({})}>+ New project</button>} {!isAdmin && <button className="btn" onClick={() => setEditingProject({})}>+ New project</button>}</p>
-      <p><input className="search-input" placeholder="Search projects…" value={projectQuery} onChange={(e) => setProjectQuery(e.target.value)} /></p>
+      <p><input className="search-input" aria-label="Search projects" placeholder="Search projects…" value={projectQuery} onChange={(e) => setProjectQuery(e.target.value)} /></p>
       <div className="grid">{filteredProjects.map((p) => (<div className="card" key={p.id}><h3>{p.title} <SampleBadge isSample={p.isSample} /></h3><p className="muted">{p.category} · <span className={`status-chip ${p.status}`}>{p.status === 'published' ? 'Published' : 'Draft'}</span></p><p><button className="btn secondary small" onClick={() => setEditingProject(p)}>Edit</button>{' '}{isAdmin && <button className="btn secondary small" onClick={() => setDeleting({ kind: 'project', id: p.id, label: p.title })}>Delete</button>}</p></div>))}</div>
-      {!filteredProjects.length && <p className="muted">{projectQuery ? 'No projects match that search.' : 'No projects yet.'} <button className="btn secondary small" onClick={() => setEditingProject({})}>Add the first project</button></p>}
+      {!filteredProjects.length && !sectionErrors.projects && <p className="muted">{projectQuery ? 'No projects match that search.' : 'No projects yet.'} <button className="btn secondary small" onClick={() => setEditingProject({})}>Add the first project</button></p>}
       {editingProject !== undefined && (<Modal title={editingProject?.id ? 'Edit project' : 'New project'} onClose={() => setEditingProject(undefined)}><ProjectForm initial={editingProject} members={members} onSaved={() => { setEditingProject(undefined); reload(); }} onCancel={() => setEditingProject(undefined)} push={push} /></Modal>)}</div>)}
 
     {tab === 'achievements' && (<div><p><button className="btn" onClick={() => setEditingAchievement({})}>+ New achievement</button></p>
-      <p><input className="search-input" placeholder="Search achievements…" value={achievementQuery} onChange={(e) => setAchievementQuery(e.target.value)} /></p>
-      <div className="grid">{filteredAchievements.map((a) => (<div className="card" key={a.id}><h3>{a.title} <SampleBadge isSample={a.isSample} /></h3><p className="muted">{a.issuer} · {a.type} · {a.date}</p><p>{a.description}</p><p><button className="btn secondary small" onClick={() => setEditingAchievement(a)}>Edit</button>{' '}{isAdmin && <button className="btn secondary small" onClick={() => setDeleting({ kind: 'achievement', id: a.id, label: a.title })}>Delete</button>}</p></div>))}</div>
-      {!filteredAchievements.length && <p className="muted">{achievementQuery ? 'No achievements match that search.' : 'No achievements yet.'} <button className="btn secondary small" onClick={() => setEditingAchievement({})}>Add the first achievement</button></p>}
+      <p><input className="search-input" aria-label="Search achievements" placeholder="Search achievements…" value={achievementQuery} onChange={(e) => setAchievementQuery(e.target.value)} /></p>
+      <div className="grid">{filteredAchievements.map((a) => (<div className="card" key={a.id}><h3>{a.title} <SampleBadge isSample={a.isSample} /></h3><p className="muted">{a.issuer} · {a.type} · {a.date} · <span className={`status-chip ${a.status || 'draft'}`}>{a.status === 'published' ? 'Published' : 'Draft'}</span></p><p>{a.description}</p><p><button className="btn secondary small" onClick={() => setEditingAchievement(a)}>Edit</button>{' '}{isAdmin && <button className="btn secondary small" onClick={() => setDeleting({ kind: 'achievement', id: a.id, label: a.title })}>Delete</button>}</p></div>))}</div>
+      {!filteredAchievements.length && !sectionErrors.achievements && <p className="muted">{achievementQuery ? 'No achievements match that search.' : 'No achievements yet.'} <button className="btn secondary small" onClick={() => setEditingAchievement({})}>Add the first achievement</button></p>}
       {editingAchievement !== undefined && (<Modal title={editingAchievement?.id ? 'Edit achievement' : 'New achievement'} onClose={() => setEditingAchievement(undefined)}><AchievementForm initial={editingAchievement} members={members} isAdmin={isAdmin} onSaved={() => { setEditingAchievement(undefined); reload(); }} onCancel={() => setEditingAchievement(undefined)} push={push} /></Modal>)}</div>)}
 
     {tab === 'users' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>
@@ -208,17 +245,17 @@ export default function AdminDashboard() {
       <h2>Accounts</h2>
       <div className="grid">{users.map((u) => { const linked = members.find((m) => m.id === u.member_id); return (<div className="card" key={u.id}><h3>{u.name || u.email}</h3><p className="muted">{u.email} · {u.role} · {u.account_status}</p><p className="muted">Profile: {linked ? linked.full_name : 'Not linked yet'}</p>
         <label>Link profile<select value={linkDraft[u.id] ?? u.member_id ?? ''} onChange={(e) => setLinkDraft({ ...linkDraft, [u.id]: e.target.value })}><option value="">No profile</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
-        <p><button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { member_id: linkDraft[u.id] ?? u.member_id ?? '' })}>Save link</button>{' '}
-        {u.account_status === 'invited' && <><button className="btn secondary small" onClick={() => userAction(u.id, 'resend', undefined, u.email)}>Resend setup email</button>{' '}<button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>Activate</button>{' '}<button className="btn secondary small" onClick={() => userAction(u.id, 'revoke')}>Revoke</button>{' '}</>}
-        {u.account_status === 'active' && <button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'deactivated' })}>Deactivate</button>}
-        {u.account_status === 'deactivated' && <button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>Reactivate</button>}</p>
+        <p><button className="btn secondary small" disabled={!!pending[`user-${u.id}-patch`]} onClick={() => userAction(u.id, 'patch', { member_id: linkDraft[u.id] ?? u.member_id ?? '' })}>{pending[`user-${u.id}-patch`] ? 'Working…' : 'Save link'}</button>{' '}
+        {u.account_status === 'invited' && <><button className="btn secondary small" disabled={!!pending[`user-${u.id}-resend`]} onClick={() => userAction(u.id, 'resend', undefined, u.email)}>{pending[`user-${u.id}-resend`] ? 'Working…' : 'Resend setup email'}</button>{' '}<button className="btn secondary small" disabled={!!pending[`user-${u.id}-patch`]} onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>{pending[`user-${u.id}-patch`] ? 'Working…' : 'Activate'}</button>{' '}<button className="btn secondary small" disabled={!!pending[`user-${u.id}-revoke`]} onClick={() => userAction(u.id, 'revoke')}>{pending[`user-${u.id}-revoke`] ? 'Working…' : 'Revoke'}</button>{' '}</>}
+        {u.account_status === 'active' && <button className="btn secondary small" disabled={!!pending[`user-${u.id}-patch`]} onClick={() => userAction(u.id, 'patch', { account_status: 'deactivated' })}>{pending[`user-${u.id}-patch`] ? 'Working…' : 'Deactivate'}</button>}
+        {u.account_status === 'deactivated' && <button className="btn secondary small" disabled={!!pending[`user-${u.id}-patch`]} onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>{pending[`user-${u.id}-patch`] ? 'Working…' : 'Reactivate'}</button>}</p>
         <label>Set / reset password<input type="password" value={passwordDraft[u.id] || ''} onChange={(e) => setPasswordDraft({ ...passwordDraft, [u.id]: e.target.value })} placeholder="At least 6 characters" /></label>
-        <p><button className="btn secondary small" onClick={() => setAccountPassword(u.id)}>Set password</button><span className="muted"> Share it privately — it is not shown again.</span></p></div>); })}</div>
-      {!users.length && <p className="muted">No accounts yet, or the backend could not list them.</p>}</div>))}
+        <p><button className="btn secondary small" disabled={!!pending[`pw-${u.id}`]} onClick={() => setAccountPassword(u.id)}>{pending[`pw-${u.id}`] ? 'Setting…' : 'Set password'}</button><span className="muted"> Share it privately — it is not shown again.</span></p></div>); })}</div>
+      {!users.length && !sectionErrors.users && <p className="muted">No accounts yet.</p>}</div>))}
 
     {tab === 'messages' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>{messages.map((m) => (<div className="card" key={m.id}><strong>{m.name} ({m.email})</strong> <span className="muted">{m.read ? 'Read' : 'Unread'} · {m.created_at}</span><p>{m.subject}</p><p>{m.message}</p>
-        <p><a className="btn secondary small" href={`mailto:${m.email}?subject=${encodeURIComponent('Re: ' + (m.subject || ''))}`}>Reply by email</a>{' '}<button className="btn secondary small" onClick={() => messageAction(m.id, !m.read)}>{m.read ? 'Mark unread' : 'Mark read'}</button>{' '}<button className="btn secondary small" onClick={() => setDeleting({ kind: 'message', id: m.id, label: m.subject || m.name })}>Delete</button></p></div>))}
-      {!messages.length && <p className="muted">No messages yet.</p>}</div>))}
+        <p><a className="btn secondary small" href={`mailto:${m.email}?subject=${encodeURIComponent('Re: ' + (m.subject || ''))}`}>Reply by email</a>{' '}<button className="btn secondary small" disabled={!!pending[`msg-${m.id}`]} onClick={() => messageAction(m.id, !m.read)}>{pending[`msg-${m.id}`] ? 'Working…' : (m.read ? 'Mark unread' : 'Mark read')}</button>{' '}<button className="btn secondary small" onClick={() => setDeleting({ kind: 'message', id: m.id, label: m.subject || m.name })}>Delete</button></p></div>))}
+      {!messages.length && !sectionErrors.messages && <p className="muted">No messages yet.</p>}</div>))}
 
     {tab === 'media' && (<div><h2>Photos & files</h2>
       {mediaError && <p className="error">{mediaError} — uploads will not work until Cloudinary is set up in Vercel.</p>}
@@ -238,12 +275,13 @@ export default function AdminDashboard() {
       <h2>Earlier versions</h2><p className="muted">A snapshot is saved every time a member, project or achievement is edited, so you can go back to it. Site settings changes are not saved as snapshots yet, so they cannot be restored from here.</p>
       <label>Filter by type<input value={revEntity} onChange={(e) => setRevEntity(e.target.value)} placeholder="members, projects, achievements" /></label>
       <label>Filter by record ID<input value={revId} onChange={(e) => setRevId(e.target.value)} placeholder="Record ID" /></label>
-      <p><button className="btn secondary" onClick={async () => { const r = await apiGet<Revision[]>(`/admin/revisions?entity=${encodeURIComponent(revEntity)}&entity_id=${encodeURIComponent(revId)}`, true); if (r.error) push('error', r.error.message); else setRevisions(r.data || []); }}>Load earlier versions</button></p>
-      {revisions.map((r) => (<div className="card" key={r.id}><p><strong>{r.entity} / {r.entity_id}</strong></p><p className="muted">{r.user_id} · {r.created_at}</p><p><button className="btn secondary small" onClick={() => restoreRevision(r.id)}>Restore this version</button></p></div>))}
+      <p><button className="btn secondary" disabled={!!pending['rev-load']} onClick={async () => { if (pending['rev-load']) return; setPending((x) => ({ ...x, ['rev-load']: true })); try { const r = await apiGet<Revision[]>(`/admin/revisions?entity=${encodeURIComponent(revEntity)}&entity_id=${encodeURIComponent(revId)}`, true); if (r.error) push('error', r.error.message); else setRevisions(r.data || []); } finally { setPending((x) => ({ ...x, ['rev-load']: false })); } }}>{pending['rev-load'] ? 'Loading…' : 'Load earlier versions'}</button></p>
+      {revisions.map((r) => (<div className="card" key={r.id}><p><strong>{r.entity} / {r.entity_id}</strong></p><p className="muted">{r.user_id} · {r.created_at}</p><p><button className="btn secondary small" disabled={!!pending[`rev-${r.id}`]} onClick={() => restoreRevision(r.id)}>{pending[`rev-${r.id}`] ? 'Restoring…' : 'Restore this version'}</button></p></div>))}
       {!revisions.length && <p className="muted">No earlier versions yet — edit a member, project or achievement first, and a snapshot will be saved before the change.</p>}</div>))}
 
     {tab === 'settings' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (settings ? <SettingsForm initial={settings} onSaved={reload} push={push} /> : <p className="muted">Settings could not be loaded.</p>))}
 
+    </div>
     {deleting && <ConfirmDialog text={`Delete "${deleting.label}"? This cannot be undone from this dialog.`} busy={deleteBusy} onCancel={() => setDeleting(null)} onConfirm={doDelete} />}
     <Toasts toasts={toasts} dismiss={dismiss} />
   </div>);

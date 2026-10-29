@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import type { Member, Project, Achievement } from '../../../lib/types';
 import { Loading, ErrorBox, SampleBadge } from '../../shared';
-import { Modal, CopyButton, SkeletonGrid } from '../../../components/ui';
+import { Modal, CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function MemberDetail({ slug }: { slug: string }) {
   const [m, setM] = useState<Member | null>(null); const [projects, setProjects] = useState<Project[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]); const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -27,7 +27,7 @@ export default function MemberDetail({ slug }: { slug: string }) {
     })();
   }, [slug]);
   if (loading) return <SkeletonGrid />;
-  if (error || !m) return <ErrorBox message={error || 'Member not found.'} />;
+  if (error || !m) return (<div><ErrorBox message={error || 'Member not found.'} /><p><a href="/team">← Back to team</a></p></div>);
   const idx = allMembers.findIndex((x) => x.id === m.id);
   const prev = idx > 0 ? allMembers[idx - 1] : null; const next = idx >= 0 && idx < allMembers.length - 1 ? allMembers[idx + 1] : null;
   const friendlyCv = `${m.full_name.replace(/[^a-zA-Z]+/g, '-')}-CV.pdf`;
@@ -35,7 +35,7 @@ export default function MemberDetail({ slug }: { slug: string }) {
     {m.cover_url ? <img className="blur-up" src={m.cover_url} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 20 }} /> : null}
     <h1>{m.full_name} <SampleBadge isSample={m.isSample} /></h1>
     <p className="muted">{m.role_title} {m.location ? `· ${m.location}` : ''} {m.availability ? `· ${m.availability}` : ''}</p>
-    {m.photo_url ? <img className="blur-up" src={m.photo_url} alt={`${m.full_name} photo`} style={{ maxWidth: 320, borderRadius: 20, cursor: 'pointer' }} onClick={() => setLightbox(m.photo_url || null)} /> : <span className="avatar" aria-hidden="true" style={{ width: 96, height: 96, fontSize: 28 }}>{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}
+    {m.photo_url ? <img className="blur-up" src={m.photo_url} alt={`${m.full_name} photo`} tabIndex={0} role="button" aria-label={`Open ${m.full_name} photo`} style={{ maxWidth: 320, borderRadius: 20, cursor: 'pointer' }} onClick={() => setLightbox(m.photo_url || null)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(m.photo_url || null); } }} /> : <span className="avatar" aria-hidden="true" style={{ width: 96, height: 96, fontSize: 28 }}>{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}
     <h2>About</h2><p>{m.bio || m.short_intro || 'No biography published yet.'}</p>
     <h2>Skills &amp; Expertise</h2>{(m.skills || []).length ? (m.skills || []).map((s) => (<div key={s.name}><p>{s.name} <span className="muted">({s.category}) — {s.level}%</span></p><div className="skill-bar" role="img" aria-label={`${s.name} ${s.level} percent`}><div style={{ width: `${s.level || 0}%` }} /></div></div>)) : <p className="muted">No skills listed yet.</p>}
     <h2>Education &amp; Experience</h2><div className="timeline">
@@ -55,6 +55,6 @@ export default function MemberDetail({ slug }: { slug: string }) {
       <embed src={m.resume_path} type="application/pdf" style={{ width: '100%', height: '60vh' }} />
       <p><a href={m.resume_path} target="_blank" rel="noreferrer">Open in new tab</a> (fallback if the embedded viewer does not load) · <a href={m.resume_path} download={friendlyCv}>Download</a></p>
     </Modal>)}
-    {lightbox && (<div className="lightbox" role="dialog" aria-modal="true" aria-label="Photo preview" onClick={() => setLightbox(null)}><img src={lightbox} alt={`${m.full_name} photo`} /><button className="icon-btn" style={{ top: 16, right: 16 }} aria-label="Close preview" onClick={() => setLightbox(null)}>×</button><p className="muted" style={{ position: 'absolute', bottom: 16 }}>Press Esc or tap outside to close. Pinch-zoom is not implemented in this viewer.</p></div>)}
+    {lightbox && (<Lightbox label="Photo preview" src={lightbox} alt={`${m.full_name} photo`} onClose={() => setLightbox(null)} />)}
   </div>);
 }

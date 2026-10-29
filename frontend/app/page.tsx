@@ -19,16 +19,19 @@ export default function Home() {
   const [members, setMembers] = useState<Member[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [error, setError] = useState('');
+  const [siteError, setSiteError] = useState(''); const [membersError, setMembersError] = useState('');
+  const [projectsError, setProjectsError] = useState(''); const [achievementsError, setAchievementsError] = useState('');
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    (async () => {
-      const [s, m, p, a] = await Promise.all([apiGet<SiteSettings>('/site'), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects'), apiGet<Achievement[]>('/achievements')]);
-      if (s.error) setError(s.error.message); else setSite(s.data);
-      setMembers(m.data || []); setProjects(p.data || []); setAchievements(a.data || []);
-      setLoading(false);
-    })();
-  }, []);
+  const load = async () => {
+    setLoading(true); setSiteError(''); setMembersError(''); setProjectsError(''); setAchievementsError('');
+    const [s, m, p, a] = await Promise.all([apiGet<SiteSettings>('/site'), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects'), apiGet<Achievement[]>('/achievements')]);
+    if (s.error) setSiteError(s.error.message); else setSite(s.data);
+    if (m.error) setMembersError(m.error.message); else setMembers(m.data || []);
+    if (p.error) setProjectsError(p.error.message); else setProjects(p.data || []);
+    if (a.error) setAchievementsError(a.error.message); else setAchievements(a.data || []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
   if (loading) return <SkeletonGrid count={4} />;
   const featured = projects.filter((p) => p.featured);
   const videoCount = projects.filter((p) => p.category === 'AI Video').length;
@@ -39,27 +42,27 @@ export default function Home() {
       <p>{site?.tagline || 'Who we are, what we build, and what we have achieved.'}</p>
       <p><a className="btn" href="/team">Meet the Team</a> <a className="btn secondary" href="/projects">View Projects</a></p>
     </div>
-    {error && <ErrorBox message={error} />}
+    {siteError && (<div><ErrorBox message={siteError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">Site settings could not be loaded, so generic headings are shown. This is a failed request, not an empty site.</p></div>)}
     <Section title="About / Mission"><p>{site?.mission || 'Mission content is managed in the admin dashboard.'}</p><p className="muted">{site?.about || ''}</p></Section>
     <Section title="What We Do"><div className="grid">
       {['AI Video Creation', 'AI Projects', 'Web Development', 'Creative Storytelling'].map((t) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">AI videos, AI tools and websites, presented as a team portfolio.</p></div>))}
     </div></Section>
-    <Section title="Meet the Team"><div className="team-strip">
+    <Section title="Meet the Team">{membersError ? (<div><ErrorBox message={membersError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="team-strip">
       {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}><span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span><h3><a href={`/team/${m.slug}`}>{m.full_name}</a> <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
-    </div><p><a href="/team">See the full team →</a></p></Section>
-    <Section title="Featured Projects"><div className="grid">
+    </div><p><a href="/team">See the full team →</a></p></>)}</Section>
+    <Section title="Featured Projects">{projectsError ? (<div><ErrorBox message={projectsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
       {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a> <SampleBadge isSample={p.isSample} /></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}
-    </div></Section>
+    </div>)}</Section>
     <Section title="Stats"><div className="grid">
-      <div className="card"><Counter value={members.length} /><p className="muted">Members</p></div>
-      <div className="card"><Counter value={projects.length} /><p className="muted">Projects</p></div>
-      <div className="card"><Counter value={achievements.length} /><p className="muted">Certificates &amp; achievements</p></div>
-      <div className="card"><Counter value={videoCount} /><p className="muted">AI videos</p></div>
+      <div className="card">{membersError ? <span className="stat">—</span> : <Counter value={members.length} />}<p className="muted">Members{membersError ? ' (unavailable)' : ''}</p></div>
+      <div className="card">{projectsError ? <span className="stat">—</span> : <Counter value={projects.length} />}<p className="muted">Projects{projectsError ? ' (unavailable)' : ''}</p></div>
+      <div className="card">{achievementsError ? <span className="stat">—</span> : <Counter value={achievements.length} />}<p className="muted">Certificates &amp; achievements{achievementsError ? ' (unavailable)' : ''}</p></div>
+      <div className="card">{projectsError ? <span className="stat">—</span> : <Counter value={videoCount} />}<p className="muted">AI videos{projectsError ? ' (unavailable)' : ''}</p></div>
     </div></Section>
-    <Section title="Achievements highlights"><div className="grid">
+    <Section title="Achievements highlights">{achievementsError ? (<div><ErrorBox message={achievementsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The achievement list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
       {achievements.filter((a) => a.featured).map((a) => (<div className="card card-hover" key={a.id}><h3>{a.title} <SampleBadge isSample={a.isSample} /></h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p></div>))}
       {!achievements.filter((a) => a.featured).length && <Empty text="No featured achievements yet." />}
-    </div></Section>
+    </div>)}</Section>
     <Section title="Contact"><p><a className="btn" href="/contact">Send a message</a> <a className="btn secondary" href="/team">Meet the team first</a></p><p className="muted">No public sign-up: accounts are created by an admin only.</p></Section>
   </div>);
 }

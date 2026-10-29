@@ -326,3 +326,24 @@ Three.js or Lottie; reduced-motion is honoured via CSS.
   be confirmed live with a real new member/project slug after the
   next deploy.
 - Resend is optional and not required for invites to work.
+
+## Testing
+
+Run these from the project directories. All tests use local demo mode only
+(DEMO_MODE=true, Firebase disabled) — no production data, account, email or
+Cloudinary asset is touched.
+
+Backend (from `backend/`):
+- `npm test` — API regression suite (`tests/api.test.js`): 16 pass, 1 skipped.
+- `npm run lint` — `node --check` over every backend source file.
+- `npm run build` — there is no backend build step; the Vercel adapter is
+  `api/index.js` (syntax-checked by lint).
+
+Frontend (from `frontend/`):
+- `npm test` — static regression checks (`tests/static.test.js`): 11 pass.
+- `npm run typecheck` — `tsc --noEmit`.
+- `npm run build` — Next.js production build (16 static pages).
+
+Blocked (not run, do not claim): browser/viewport/keyboard/Lighthouse
+checks, live Firebase first-login, live Cloudinary upload/verify, live
+contact submission, and npm audit (registry-blocked in this environment).

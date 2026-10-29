@@ -24,3 +24,17 @@
   from = "/projects/*"
   to = "/projects/sample-ai-showreel.html"
   status = 200
+
+# Section 5E security headers. CSP keeps 'unsafe-inline' for scripts and
+# styles because Next.js static export + the inline theme script in
+# layout.tsx require it; this is the least permissive working config, not
+# a blanket allow. connect-src covers the Vercel API and Firebase Auth.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https://aict-portfolio.vercel.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; font-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"

@@ -96,7 +96,14 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate }: { i
 }
 
 export function ProjectForm({ initial, members, onSaved, onCancel, push }: { initial: Partial<Project> | null; members: Member[]; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void }) {
-  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', sort_order: 0, project_members: [], ...(initial || {}) });
+  // Audit fix (data-integrity review): legacy/demo projects may carry only
+  // member_ids with no project_members. Without this, opening such a project
+  // and saving would send member_ids: [] and silently drop all assignments.
+  const initialMembers = (initial as AnyObj)?.project_members as AnyObj[] | undefined;
+  const initialIds = (initial as AnyObj)?.member_ids as string[] | undefined;
+  const seededMembers = (initialMembers && initialMembers.length) ? initialMembers
+    : (initialIds || []).map((member_id) => ({ member_id, role_in_project: '' }));
+  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const csv = (v: unknown) => Array.isArray(v) ? v.join(', ') : '';
@@ -106,7 +113,9 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
     if (!errText(f.title).trim()) errs.title = 'Title is required.';
     setErrors(errs); if (Object.keys(errs).length) return;
     const pm = (f.project_members as AnyObj[]).filter((x) => x.member_id);
-    const body = { ...f, year: f.year ? Number(f.year) : undefined, sort_order: Number(f.sort_order) || 0, member_ids: pm.map((x) => x.member_id), project_members: pm };
+    // Blank year must be sent as null (not undefined, which JSON drops)
+    // so the backend can delete the field instead of keeping the old year.
+    const body = { ...f, year: (f.year === '' || f.year === null || f.year === undefined) ? null : Number(f.year), sort_order: Number(f.sort_order) || 0, member_ids: pm.map((x) => x.member_id), project_members: pm };
     await saveForm(initial?.id ? `/admin/projects/${initial.id}` : '/admin/projects', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
   const assignments = (f.project_members as AnyObj[]) || [];
@@ -124,7 +133,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
     <Text label="Video URL" value={errText(f.video_url)} onChange={(v) => set('video_url', v)} />
     <Text label="Repo URL" value={errText(f.repo_url)} onChange={(v) => set('repo_url', v)} />
     <Text label="Live URL" value={errText(f.live_url)} onChange={(v) => set('live_url', v)} />
-    <Text label="Year" type="number" value={errText(f.year)} onChange={(v) => set('year', v)} />
+    <Text label="Year (leave blank to clear)" type="number" value={f.year === null || f.year === undefined ? '' : String(f.year)} onChange={(v) => set('year', v)} />
     <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} />
     <Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} />
     <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} />
@@ -141,12 +150,15 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push }: { ini
 }
 
 export function AchievementForm({ initial, members, isAdmin, onSaved, onCancel, push }: { initial: Partial<Achievement> | null; members: Member[]; isAdmin: boolean; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void }) {
-  const [f, setF] = useState<AnyObj>({ title: '', issuer: '', type: 'certificate', date: '', description: '', credential_url: '', image_path: '', featured: false, member_id: '', ...(initial || {}) });
+  const [f, setF] = useState<AnyObj>({ title: '', issuer: '', type: 'certificate', date: '', description: '', credential_url: '', image_path: '', featured: false, member_id: '', status: 'draft', ...(initial || {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); if (!errText(f.title).trim()) { setErrors({ title: 'Title is required.' }); return; }
-    const body = isAdmin ? f : { ...f, member_id: '' };
+    // Members never send status: the backend defaults new achievements to
+    // draft and strips status on member PATCH, so a member cannot publish
+    // their own achievement even with a crafted request body.
+    const body = isAdmin ? f : { ...f, status: undefined, member_id: '' };
     await saveForm(initial?.id ? `/admin/achievements/${initial.id}` : '/admin/achievements', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
   return (<form onSubmit={submit}>
@@ -158,8 +170,9 @@ export function AchievementForm({ initial, members, isAdmin, onSaved, onCancel, 
     <Text label="Credential URL" value={errText(f.credential_url)} onChange={(v) => set('credential_url', v)} />
     <Text label="Image URL" value={errText(f.image_path)} onChange={(v) => set('image_path', v)} />
     <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} />
+    {isAdmin && <><Select label="Visibility" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
     {isAdmin && (<Field label="Member"><select value={errText(f.member_id)} onChange={(e) => set('member_id', e.target.value)}><option value="">— No member —</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></Field>)}
-    {!isAdmin && <p className="muted">As a member, this achievement is saved to your own profile (the backend fills in your member record).</p>}
+    {!isAdmin && <p className="muted">As a member, this achievement is saved to your own profile (the backend fills in your member record) as a <strong>draft</strong> for an admin to review. It will not be public until an admin publishes it.</p>}
     <p><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save achievement'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
   </form>);
 }

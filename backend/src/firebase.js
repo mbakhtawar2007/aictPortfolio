@@ -20,5 +20,6 @@ export function getAdmin() {
     return app;
   } catch (e) { initError = new Error('Firebase is not configured correctly'); throw initError; }
 }
+export function fieldDelete() { return admin.firestore.FieldValue.delete(); }
 export function db() { const a = getAdmin(); return a ? a.firestore() : null; }
 export function authAdmin() { const a = getAdmin(); return a ? a.auth() : null; }

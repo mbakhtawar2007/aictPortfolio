@@ -1,14 +1,41 @@
 'use client';
 import { useState } from 'react';
 import { signInExisting, sendPasswordSetupEmail, firebaseConfigured } from '../../../lib/firebaseClient';
+// Map raw Firebase error codes to safe, clear messages. Never show the
+// raw Firebase string (it leaks implementation detail and reads like a
+// crash), and never reveal whether the email or the password was wrong.
+export function friendlyAuthError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : '';
+  const m = raw.match(/auth\/([a-z0-9-]+)/);
+  const code = m ? m[1] : '';
+  switch (code) {
+    case 'invalid-credential': case 'user-not-found': case 'wrong-password': case 'invalid-email':
+      return 'Email or password is incorrect. Check both and try again.';
+    case 'too-many-requests':
+      return 'Too many sign-in attempts. Wait a few minutes and try again.';
+    case 'network-request-failed':
+      return 'Could not reach the sign-in service. Check your connection and try again.';
+    case 'operation-not-allowed': case 'user-disabled':
+      return 'Sign-in is not available for this account. Contact the site owner.';
+    default:
+      if (/not configured/i.test(raw)) return 'Sign-in is not configured for this site. Contact the site owner.';
+      return 'Sign-in failed. Try again.';
+  }
+}
 export default function AdminLogin() {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
-  const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [resetNote, setResetNote] = useState('');
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [resetNote, setResetNote] = useState(''); const [forgotBusy, setForgotBusy] = useState(false);
   async function forgotPassword() {
     if (!email.trim()) { setError('Enter your email first, then use Forgot password.'); return; }
-    setError(''); setResetNote('');
+    setError(''); setResetNote(''); setForgotBusy(true);
     try { await sendPasswordSetupEmail(email.trim()); setResetNote('If an account exists for this email, a password reset link has been sent to it.'); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Could not send a reset link.'); }
+    catch (err) {
+      // Do not reveal whether the email exists: treat unknown-email the
+      // same as success, and map other failures to a safe message.
+      const raw = err instanceof Error ? err.message : '';
+      if (/auth\/(user-not-found|invalid-email)/.test(raw)) setResetNote('If an account exists for this email, a password reset link has been sent to it.');
+      else setError(friendlyAuthError(err));
+    } finally { setForgotBusy(false); }
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(''); setBusy(true);
@@ -17,7 +44,7 @@ export default function AdminLogin() {
       window.localStorage.setItem('aict_admin_token', token);
       // Role gate: admins go to /admin, members go to their own page.
       window.location.href = '/dashboard';
-    } catch (err) { setError(err instanceof Error ? err.message : 'Sign-in failed.'); setBusy(false); }
+    } catch (err) { setError(friendlyAuthError(err)); setBusy(false); }
   }
   return (<div><h1>Admin login</h1>
     <p className="muted">Existing accounts only. There is no sign-up link, and no account can be created from this page. An admin must invite you first.</p>
@@ -27,7 +54,7 @@ export default function AdminLogin() {
       <label>Password<input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
       {error && <p className="error">{error}</p>}
       <button className="btn" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-      <p><button type="button" className="btn secondary small" onClick={forgotPassword}>Forgot password?</button></p>
+      <p><button type="button" className="btn secondary small" disabled={forgotBusy} onClick={forgotPassword}>{forgotBusy ? 'Sending…' : 'Forgot password?'}</button></p>
       {resetNote && <p className="success">{resetNote}</p>}
     </form>
     <p className="muted">Deactivated accounts are denied by the backend on every protected request, even with a token.</p></div>);

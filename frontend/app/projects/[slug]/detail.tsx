@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import type { Project, Member } from '../../../lib/types';
 import { Loading, ErrorBox, SampleBadge } from '../../shared';
-import { SkeletonGrid } from '../../../components/ui';
+import { SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function ProjectDetail({ slug }: { slug: string }) {
   const [p, setP] = useState<Project | null>(null); const [members, setMembers] = useState<Member[]>([]);
   const [all, setAll] = useState<Project[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
@@ -30,28 +30,23 @@ export default function ProjectDetail({ slug }: { slug: string }) {
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
   if (loading) return <SkeletonGrid />;
-  if (error || !p) return <ErrorBox message={error || 'Project not found.'} />;
+  if (error || !p) return (<div><ErrorBox message={error || 'Project not found.'} /><p><a href="/projects">← Back to projects</a></p></div>);
   const contributors = members.filter((x) => (p.member_ids || []).includes(x.id));
   const roleOf = (id: string) => (p.project_members || []).find((x) => x.member_id === id)?.role_in_project || '';
   const related = all.filter((x) => x.id !== p.id && x.category === p.category).slice(0, 3);
   return (<div>
-    {p.cover_url ? <img className="blur-up" src={p.cover_url} alt={`${p.title} cover`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLb(0)} /> : null}
+    {p.cover_url ? <img className="blur-up" src={p.cover_url} alt={`${p.title} cover`} tabIndex={0} role="button" aria-label={`Open ${p.title} cover`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLb(0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLb(0); } }} /> : null}
     <h1>{p.title} <SampleBadge isSample={p.isSample} /></h1>
     <p className="muted">{p.category} {p.year ? `· ${p.year}` : ''} {p.featured ? '· Featured' : ''}</p>
     <p>{p.tagline}</p><p>{p.description}</p>
     {p.case_study && <><h2>Case study</h2><p>{p.case_study}</p></>}
-    {gallery.length ? (<><h2>Gallery</h2><div className="grid">{gallery.map((url, i) => (<img key={url} src={url} alt={`${p.title} media ${i + 1}`} style={{ cursor: 'pointer', borderRadius: 12 }} onClick={() => setLb(i)} />))}</div><p className="muted">Tap an image to open the lightbox. Use Esc to close, arrow keys to move. Pinch-zoom is not implemented.</p></>) : null}
+    {gallery.length ? (<><h2>Gallery</h2><div className="grid">{gallery.map((url, i) => (<img key={url} src={url} alt={`${p.title} media ${i + 1}`} tabIndex={0} role="button" aria-label={`Open ${p.title} media ${i + 1}`} style={{ cursor: 'pointer', borderRadius: 12 }} onClick={() => setLb(i)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLb(i); } }} />))}</div><p className="muted">Tap an image to open the lightbox. Use Esc to close, arrow keys to move. Pinch-zoom is not implemented.</p></>) : null}
     {p.video_url && <p><a className="btn" href={p.video_url} target="_blank" rel="noreferrer">Watch video</a></p>}
     <h2>Technology</h2><p>{(p.tech_stack || []).map((t) => <span className="chip" key={t}>{t}</span>)}{(p.tools_used || []).map((t) => <span className="chip" key={t}>{t}</span>)}{!(p.tech_stack || []).length && !(p.tools_used || []).length && <span className="muted">No technologies listed.</span>}</p>
     <h2>Contributors</h2><p>{contributors.map((m) => <a key={m.id} href={`/team/${m.slug}`} style={{ marginRight: 12 }}>{m.full_name}{roleOf(m.id) ? ` (${roleOf(m.id)})` : ''}</a>)}{!contributors.length && <span className="muted">No contributors listed.</span>}</p>
     <p>{p.repo_url && <a className="btn secondary" href={p.repo_url} target="_blank" rel="noreferrer">Repository</a>} {p.live_url && <a className="btn secondary" href={p.live_url} target="_blank" rel="noreferrer">Live demo</a>}</p>
     {related.length ? (<><h2>Related projects</h2><div className="grid">{related.map((r) => <div className="card card-hover" key={r.id}><h3><a href={`/projects/${r.slug}`}>{r.title}</a></h3><p>{r.tagline}</p></div>)}</div></>) : null}
     <p><a href="/projects">← Back to projects</a></p>
-    {lb !== null && gallery[lb] && (<div className="lightbox" role="dialog" aria-modal="true" aria-label="Project gallery" onClick={() => setLb(null)}>
-      <img src={gallery[lb]} alt={`${p.title} media ${lb + 1}`} onClick={(e) => e.stopPropagation()} />
-      <button className="icon-btn" style={{ top: 16, right: 16 }} aria-label="Close gallery" onClick={() => setLb(null)}>×</button>
-      {gallery.length > 1 && (<><button className="icon-btn" style={{ left: 16, top: '50%' }} aria-label="Previous image" onClick={(e) => { e.stopPropagation(); setLb((lb - 1 + gallery.length) % gallery.length); }}>‹</button>
-      <button className="icon-btn" style={{ right: 16, top: '50%' }} aria-label="Next image" onClick={(e) => { e.stopPropagation(); setLb((lb + 1) % gallery.length); }}>›</button></>)}
-    </div>)}
+    {lb !== null && gallery[lb] && (<Lightbox label="Project gallery" src={gallery[lb]} alt={`${p.title} media ${lb + 1}`} onClose={() => setLb(null)} onPrev={gallery.length > 1 ? () => setLb((lb - 1 + gallery.length) % gallery.length) : undefined} onNext={gallery.length > 1 ? () => setLb((lb + 1) % gallery.length) : undefined} />)}
   </div>);
 }

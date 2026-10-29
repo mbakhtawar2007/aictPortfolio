@@ -1,7 +1,7 @@
 import express from 'express';
 import { ok, fail, parseBody, contactSchema } from '../validate.js';
 import { store, isFirebase } from '../store.js';
-import { contactAllowed } from '../rateLimit.js';
+import { contactAllowedForRequest } from '../rateLimit.js';
 import { demoMode } from '../firebase.js';
 export const publicRouter = express.Router();
 publicRouter.get('/health', (req, res) => ok(res, { status: 'ok', mode: isFirebase() ? 'firebase' : 'demo', demo: demoMode() }));
@@ -17,8 +17,7 @@ publicRouter.post('/contact', async (req, res) => {
   const body = parsed.data;
   // Honeypot: bots fill it. Silently "accept" without storing or emailing.
   if (body.website) return ok(res, { received: true });
-  const ip = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() || req.ip || 'unknown';
-  if (!contactAllowed(ip)) return fail(res, 429, 'rate_limited', 'Too many messages. Please try again later.');
+  if (!(await contactAllowedForRequest(req))) return fail(res, 429, 'rate_limited', 'Too many messages. Please try again later.');
   try {
     const msg = await store.addMessage({ name: body.name, email: body.email, subject: body.subject, message: body.message, created_at: new Date().toISOString(), read: false });
     // Resend is optional. A mail failure must not expose the key or fail the stored message.

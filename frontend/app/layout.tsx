@@ -8,8 +8,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en"><body>
       <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <Navbar />
-      <main>{children}</main>
+      <main id="main-content">{children}</main>
       <Footer />
       <BackToTop />
       <a className="mobile-contact-fab" href="/contact" aria-label="Contact the group">Contact</a>

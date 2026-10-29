@@ -11,7 +11,15 @@ export default function MemberDetail({ slug }: { slug: string }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
-      const [r, p, ms, a] = await Promise.all([apiGet<Member>(`/members/${slug}`), apiGet<Project[]>('/projects'), apiGet<Member[]>('/members'), apiGet<Achievement[]>('/achievements')]);
+      // Read the slug from the actual URL, not only from the baked-in
+      // build-time prop. Netlify rewrites an unknown /team/<slug> to a
+      // pre-rendered detail file, so the prop would otherwise be the
+      // sample slug while the visitor asked for a new member. This is
+      // what makes a newly published profile work with no rebuild.
+      const actualSlug = typeof window !== 'undefined'
+        ? decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || slug)
+        : slug;
+      const [r, p, ms, a] = await Promise.all([apiGet<Member>(`/members/${actualSlug}`), apiGet<Project[]>('/projects'), apiGet<Member[]>('/members'), apiGet<Achievement[]>('/achievements')]);
       if (r.error) setError(r.error.message); else setM(r.data);
       setProjects((p.data || []).filter((x) => (x.member_ids || []).includes(r.data?.id || '')));
       setAllMembers(ms.data || []); setAchievements((a.data || []).filter((x) => x.member_id === r.data?.id));

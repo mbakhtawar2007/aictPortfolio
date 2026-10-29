@@ -11,7 +11,14 @@ export default function ProjectDetail({ slug }: { slug: string }) {
   const gallery = [p?.cover_url].filter(Boolean) as string[];
   useEffect(() => {
     (async () => {
-      const [r, m, a] = await Promise.all([apiGet<Project>(`/projects/${slug}`), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects')]);
+      // Same URL-slug rule as the member detail page: a Netlify rewrite
+      // may serve a pre-rendered file for a new slug, so read the slug
+      // from the actual URL. This makes a newly published project work
+      // with no rebuild.
+      const actualSlug = typeof window !== 'undefined'
+        ? decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || slug)
+        : slug;
+      const [r, m, a] = await Promise.all([apiGet<Project>(`/projects/${actualSlug}`), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects')]);
       if (r.error) setError(r.error.message); else setP(r.data);
       setMembers(m.data || []); setAll(a.data || []);
       setLoading(false);

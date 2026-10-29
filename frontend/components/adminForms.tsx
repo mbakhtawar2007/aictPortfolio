@@ -30,7 +30,7 @@ async function saveForm(path: string, method: string, body: unknown, push: (k: '
   const r = await apiSend(path, method, body, true);
   setBusy(false);
   if (r.error) { push('error', r.error.message); return false; }
-  push('success', 'Saved. To make it live, rebuild the site in Netlify (Deploys → Trigger deploy).');
+  push('success', 'Saved. Visitors will see it on their next page load — no rebuild needed.');
   onSaved(); return true;
 }
 
@@ -91,7 +91,7 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate }: { i
       <Text label="URL" value={errText(it.url)} onChange={(v) => setIt({ url: v })} /></>)} />
     </section>
     <p><button className="btn" disabled={busy}>{busy ? <><span className="spinner" /> Saving…</> : selfCreate ? 'Create my profile' : 'Save member'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
-    <p className="muted">Saving stores this in the database. To make it live, rebuild the site in Netlify.</p>
+    <p className="muted">Saving stores this in the database. Visitors will see published changes on their next page load — no rebuild needed.</p>
   </form>);
 }
 
@@ -192,7 +192,7 @@ export function SettingsForm({ initial, onSaved, push }: { initial: Partial<Site
     <Text label="Open Graph image URL" value={errText(f.og_image_url)} onChange={(v) => set('og_image_url', v)} />
     </section>
     <p><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button></p>
-    <p className="muted">Publish note: saving writes to the database. The live static site updates only after a Netlify rebuild — it is not instant.</p>
+    <p className="muted">Saving stores this in the database. Visitors will see published changes on their next page load — no rebuild needed.</p>
   </form>);
 }
 export function FormModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {

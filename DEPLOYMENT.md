@@ -70,10 +70,14 @@ in this repo).
    and the `NEXT_PUBLIC_FIREBASE_*` public web config from Firebase
    Project Settings → Your apps → Web app. These are public config, not
    secrets — but keep them in env vars, not hardcoded.
-4. Publish flow: after an admin publishes content, trigger a Netlify
-   rebuild (Netlify build hook URL, called by hand or from the backend
-   in a later pass). Until that rebuild, `POST /api/admin/revalidate`
-   honestly reports `saved_refresh_pending`.
+4. Publish flow (updated — supersedes the old rebuild note): content
+   saved in the dashboard is live on the visitor's next page load,
+   with no manual rebuild and no build hook. Public pages fetch live
+   data from the Vercel API in the browser, and `frontend/netlify.toml`
+   rewrites unknown /team/* and /projects/* slugs to a pre-rendered
+   detail file whose component reads the slug from the URL. A Netlify
+   rebuild is only needed for code changes, and Netlify auto-builds
+   on a push to main.
 
 ## 6. Before launch checklist
 

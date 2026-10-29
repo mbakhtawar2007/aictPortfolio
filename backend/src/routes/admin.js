@@ -1,11 +1,16 @@
 import express from 'express';
-import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, messagePatchSchema } from '../validate.js';
+import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, messagePatchSchema, setPasswordSchema } from '../validate.js';
 import { store, isFirebase } from '../store.js';
 import { authAdmin, firebaseEnabled, demoMode } from '../firebase.js';
 import { requireAdmin, requireMemberOrAdmin, canEditMember, canEditProject } from '../auth.js';
 import { audit } from '../audit.js';
 export const adminRouter = express.Router();
 // NOTE: this router is mounted at /api/admin, so paths below are relative.
+// Who am I: lets the frontend route admins to /admin and members to
+// /member without guessing from which admin-only calls happen to fail.
+adminRouter.get('/me', requireMemberOrAdmin(async (req, res) => {
+  return ok(res, { uid: req.actor.uid, email: req.actor.email, role: req.actor.role, account_status: req.actor.account_status, member_id: req.actor.member_id || '' });
+}));
 adminRouter.get('/messages', requireAdmin(async (req, res) => { try { return ok(res, await store.messagesAll()); } catch { return fail(res, 503, 'unavailable', 'Messages are temporarily unavailable.'); } }));
 adminRouter.get('/members', requireMemberOrAdmin(async (req, res) => {
   try { const all = await store.membersAll(); const list = req.actor.role === 'admin' ? all : all.filter((m) => m.id === req.actor.member_id); return ok(res, list); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); }
@@ -94,7 +99,7 @@ adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
     return ok(res, { cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, timestamp, folder, public_id, signature });
   } catch { return fail(res, 503, 'upload_unavailable', 'File uploads are temporarily unavailable.'); }
 }));
-adminRouter.post('/revalidate', requireAdmin(async (req, res) => ok(res, { status: 'saved_refresh_pending', note: 'This frontend is a static Netlify export, so it cannot be revalidated on demand. Publishing triggers a Netlify rebuild webhook, configured by the site owner (see DEPLOYMENT.md). Content is saved; the live site updates after that rebuild.' })));
+adminRouter.post('/revalidate', requireAdmin(async (req, res) => ok(res, { status: 'live_on_next_load', note: 'Public pages fetch live data from this API in the browser, so saved content is live on the next page load with no rebuild. A Netlify rebuild is only needed for code changes, and Netlify auto-builds on a push to main.' })));
 // ---- Achievements (admin list; members see only their own) ----
 adminRouter.get('/achievements', requireMemberOrAdmin(async (req, res) => {
   try { const all = await store.achievementsAll(); const list = req.actor.role === 'admin' ? all : all.filter((a) => a.member_id === req.actor.member_id); return ok(res, list); } catch { return fail(res, 503, 'unavailable', 'Achievements are temporarily unavailable.'); }
@@ -145,31 +150,52 @@ adminRouter.get('/media', requireMemberOrAdmin(async (req, res) => {
 adminRouter.get('/users', requireAdmin(async (req, res) => { try { return ok(res, await store.rolesAll()); } catch { return fail(res, 503, 'unavailable', 'Accounts are temporarily unavailable.'); } }));
 adminRouter.post('/users/invite', requireAdmin(async (req, res) => {
   const p = parseBody(inviteSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  const { email, role, member_id, name } = p.data;
+  const { email, role, member_id, name, password } = p.data;
   try {
     // Idempotency: never create a duplicate for an already-invited/active email.
+    // Use the separate set-password endpoint for an existing account.
     const existing = await store.roleByEmail(email);
     if (existing) { await audit(store, { user_id: req.actor.uid, action: 'user.invite_existing', entity: 'user_roles', entity_id: existing.id }); return ok(res, { ...existing, already_exists: true }); }
     let uid;
     if (isFirebase()) {
       const auth = authAdmin();
-      try { const u = await auth.getUserByEmail(email); uid = u.uid; } catch { const u = await auth.createUser({ email, displayName: name, disabled: false }); uid = u.uid; }
-      // Generate the first-login link but do NOT return it (invitation tokens
-      // are never exposed in API responses). If Resend is configured, email it.
       try {
-        const link = await auth.generatePasswordResetLink(email);
-        if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
-          const { Resend } = await import('resend');
-          await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: email, subject: 'Your AICT portfolio account', text: `You have been invited to the AICT group portfolio. Set your password here: ${link}` });
-        }
-      } catch { /* link/email failure is recorded below, invite row still stands */ }
+        const u = await auth.getUserByEmail(email); uid = u.uid;
+        if (password) await auth.updateUser(uid, { password });
+      } catch { const u = await auth.createUser({ email, displayName: name, disabled: false, ...(password ? { password } : {}) }); uid = u.uid; }
+      // Only generate/send a setup link when the admin did NOT set a
+      // password. Passwords are never returned in an API response.
+      if (!password) {
+        try {
+          const link = await auth.generatePasswordResetLink(email);
+          if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
+            const { Resend } = await import('resend');
+            await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: email, subject: 'Your AICT portfolio account', text: `You have been invited to the AICT group portfolio. Set your password here: ${link}` });
+          }
+        } catch { /* link/email failure is recorded below, invite row still stands */ }
+      }
     } else {
       uid = `demo-user-${email.replace(/[^a-z0-9]/gi, '-')}`;
     }
     const row = await store.saveRole(uid, { email, name, role, account_status: 'invited', invited_by: req.actor.uid, invited_at: new Date().toISOString(), member_id: member_id || '' });
     await audit(store, { user_id: req.actor.uid, action: 'user.invite', entity: 'user_roles', entity_id: uid });
-    return ok(res, { ...row, email_delivery: isFirebase() && process.env.RESEND_API_KEY ? 'attempted' : 'not_configured' }, 201);
+    return ok(res, { ...row, password_set_by_admin: Boolean(password), email_delivery: password ? 'admin_set_password' : (isFirebase() && process.env.RESEND_API_KEY ? 'attempted' : 'not_configured') }, 201);
   } catch { return fail(res, 503, 'unavailable', 'The invitation could not be created.'); }
+}));
+// Set or reset another account's password (admin only, never your own).
+// The password is used once via the Firebase Admin SDK and is never
+// stored in Firestore, logged, or returned. Share it privately, and ask
+// the person to change it after first login (login page → Forgot password).
+adminRouter.post('/users/:id/set-password', requireAdmin(async (req, res) => {
+  if (req.params.id === req.actor.uid) return fail(res, 403, 'forbidden', 'You cannot change your own password this way.');
+  const p = parseBody(setPasswordSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
+  if (!isFirebase()) return fail(res, 503, 'unavailable', 'Password setting is only available with Firebase enabled.');
+  try {
+    const row = await store.roleByUid(req.params.id); if (!row) return fail(res, 404, 'not_found', 'Account not found.');
+    await authAdmin().updateUser(req.params.id, { password: p.data.password });
+    await audit(store, { user_id: req.actor.uid, action: 'user.password_set', entity: 'user_roles', entity_id: req.params.id });
+    return ok(res, { password_set: true });
+  } catch { return fail(res, 503, 'unavailable', 'Password could not be set.'); }
 }));
 adminRouter.patch('/users/:id', requireAdmin(async (req, res) => {
   if (req.params.id === req.actor.uid) return fail(res, 403, 'forbidden', 'You cannot change your own account this way.');

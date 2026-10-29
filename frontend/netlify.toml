@@ -1,6 +1,26 @@
-# Netlify: publish the Next.js static export. No SPA fallback rewrite:
-# real routes (/team, /projects/...) exist as files in out/ thanks to
-# trailing static export pages. A catch-all SPA rewrite would mask 404s.
+# Netlify: publish the Next.js static export.
 [build]
   command = "npm run build"
   publish = "out"
+
+# Auto-update for new detail pages, with no rebuild and no build hook:
+# public list pages and detail components already fetch live data from
+# the Vercel API in the browser, so an edit is live on the next page
+# load. The only gap was a brand-new /team/<slug> or /projects/<slug>,
+# which has no pre-rendered HTML file in out/ and would 404.
+# These rewrites (status 200, not a redirect) serve a pre-rendered
+# detail file for an unknown slug; the detail component then reads the
+# slug from the actual URL and fetches the correct record. Existing
+# pre-rendered slugs keep serving their own file first, because a
+# rewrite without force=true does not override an existing file.
+# A catch-all SPA rewrite is deliberately NOT used: it would mask
+# real 404s for other routes.
+[[redirects]]
+  from = "/team/*"
+  to = "/team/sample-ayesha-khan.html"
+  status = 200
+
+[[redirects]]
+  from = "/projects/*"
+  to = "/projects/sample-ai-showreel.html"
+  status = 200

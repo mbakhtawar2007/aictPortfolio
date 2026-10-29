@@ -5,6 +5,7 @@ import type { Member, Project, Achievement, ContactMessage, SiteSettings, UserRo
 import { Loading, ErrorBox, SampleBadge } from '../shared';
 import { Toasts, useToasts, Modal, ConfirmDialog, CopyButton } from '../../components/ui';
 import { MemberForm, ProjectForm, AchievementForm, SettingsForm } from '../../components/adminForms';
+import { sendPasswordSetupEmail } from '../../lib/firebaseClient';
 
 type Tab = 'overview' | 'members' | 'projects' | 'achievements' | 'users' | 'messages' | 'media' | 'audit' | 'settings';
 const NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
@@ -29,7 +30,8 @@ export default function AdminDashboard() {
   const [editingProject, setEditingProject] = useState<Partial<Project> | null | undefined>(undefined);
   const [editingAchievement, setEditingAchievement] = useState<Partial<Achievement> | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<{ kind: string; id: string; label: string } | null>(null); const [deleteBusy, setDeleteBusy] = useState(false);
-  const [invite, setInvite] = useState({ name: '', email: '', role: 'member', member_id: '', confirmAdmin: false }); const [inviteBusy, setInviteBusy] = useState(false); const [inviteNote, setInviteNote] = useState('');
+  const [invite, setInvite] = useState({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); const [inviteBusy, setInviteBusy] = useState(false); const [inviteNote, setInviteNote] = useState('');
+  const [passwordDraft, setPasswordDraft] = useState<Record<string, string>>({});
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>({});
   const [revEntity, setRevEntity] = useState(''); const [revId, setRevId] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf'>('image');
@@ -38,6 +40,9 @@ export default function AdminDashboard() {
 
   useEffect(() => { setToken(window.localStorage.getItem('aict_admin_token')); }, []);
   const reload = useCallback(async () => {
+    // Members do not see this page at all — send them to their own page.
+    const me = await apiGet<{ role: string }>('/admin/me', true);
+    if (me.data?.role === 'member') { window.location.href = '/member'; return; }
     const [m, p, a, msg, u, s, au, rev, med] = await Promise.all([
       apiGet<Member[]>('/admin/members', true), apiGet<Project[]>('/admin/projects', true), apiGet<Achievement[]>('/admin/achievements', true),
       apiGet<ContactMessage[]>('/admin/messages', true), apiGet<UserRole[]>('/admin/users', true), apiGet<SiteSettings>('/admin/settings', true),
@@ -67,20 +72,40 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (invite.role === 'admin' && !invite.confirmAdmin) { push('error', 'Tick the confirmation before inviting an admin.'); return; }
     if (!invite.name.trim() || !invite.email.trim()) { push('error', 'Name and email are required.'); return; }
+    if (invite.password && invite.password.length < 6) { push('error', 'Password must be at least 6 characters, or leave it blank.'); return; }
     setInviteBusy(true); setInviteNote('');
-    const r = await apiSend('/admin/users/invite', 'POST', { name: invite.name, email: invite.email, role: invite.role, member_id: invite.member_id }, true);
+    const r = await apiSend('/admin/users/invite', 'POST', { name: invite.name, email: invite.email, role: invite.role, member_id: invite.member_id, ...(invite.password ? { password: invite.password } : {}) }, true);
     setInviteBusy(false);
     if (r.error) { push('error', r.error.message); return; }
     const delivery = (r.data as Record<string, unknown> | undefined)?.email_delivery;
-    if (delivery === 'not_configured') setInviteNote('Account created, but no invitation email was sent automatically. Send this person a password link from Firebase Console → Authentication → that user → Reset password. They set their own password — you never see it.');
-    else setInviteNote('Account created. The person will receive a link to set their own password.');
+    if (delivery === 'admin_set_password') setInviteNote('Account created with the password you set. Share it privately with this person — it will not be shown again. Ask them to change it after first login (login page → Forgot password).');
+    else if (delivery === 'not_configured') {
+      // No Resend configured, so send Firebase's own password-setup email
+      // automatically from this page — no Firebase Console step needed.
+      try { await sendPasswordSetupEmail(invite.email); setInviteNote('Account created. A password setup email has been sent to them automatically — they click the link and set their own password. You never see it, and you do not need to open Firebase Console.'); }
+      catch (e) { setInviteNote(`Account created, but the automatic password email could not be sent (${e instanceof Error ? e.message : 'unknown error'}). As a fallback, send a password link from Firebase Console → Authentication → that user → Reset password.`); }
+    } else setInviteNote('Account created. The person will receive a link to set their own password.');
     push('success', 'Invitation created. Sending the same invitation again does not create a duplicate.');
-    setInvite({ name: '', email: '', role: 'member', member_id: '', confirmAdmin: false }); reload();
+    setInvite({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); reload();
   }
-  async function userAction(id: string, kind: string, body?: unknown) {
+  async function userAction(id: string, kind: string, body?: unknown, email?: string) {
     const path = kind === 'resend' ? `/admin/users/${id}/resend-invite` : kind === 'revoke' ? `/admin/users/${id}/revoke-invite` : `/admin/users/${id}`;
     const r = await apiSend(path, kind === 'resend' || kind === 'revoke' ? 'POST' : 'PATCH', body || {}, true);
-    if (r.error) push('error', r.error.message); else { push('success', 'Account updated.'); reload(); }
+    if (r.error) { push('error', r.error.message); return; }
+    // The backend resend endpoint only generates a link — it does not send
+    // an email. Send Firebase's own password email here, so Resend actually
+    // reaches the person without opening Firebase Console.
+    if (kind === 'resend' && email) {
+      try { await sendPasswordSetupEmail(email); push('success', 'Password setup email sent again.'); }
+      catch (e) { push('error', `Invitation renewed, but the password email could not be sent: ${e instanceof Error ? e.message : 'unknown error'}`); }
+    } else push('success', 'Account updated.');
+    reload();
+  }
+  async function setAccountPassword(id: string) {
+    const pw = passwordDraft[id] || '';
+    if (pw.length < 6) { push('error', 'Password must be at least 6 characters.'); return; }
+    const r = await apiSend(`/admin/users/${id}/set-password`, 'POST', { password: pw }, true);
+    if (r.error) push('error', r.error.message); else { push('success', 'Password set. Share it privately with this person — it will not be shown again.'); setPasswordDraft({ ...passwordDraft, [id]: '' }); reload(); }
   }
   async function messageAction(id: string, read: boolean) {
     const r = await apiSend(`/admin/messages/${id}`, 'PATCH', { read }, true);
@@ -88,7 +113,7 @@ export default function AdminDashboard() {
   }
   async function restoreRevision(id: string) {
     const r = await apiSend(`/admin/revisions/${id}/restore`, 'POST', {}, true);
-    if (r.error) push('error', r.error.message); else { push('success', 'Revision restored. Reload the record to see it. To make it live, rebuild the site in Netlify.'); reload(); }
+    if (r.error) push('error', r.error.message); else { push('success', 'Revision restored. Visitors will see it on their next page load — no rebuild needed.'); reload(); }
   }
   async function upload(e: React.FormEvent) {
     e.preventDefault(); if (!uploadFile) { push('error', 'Choose a file first.'); return; }
@@ -131,7 +156,7 @@ export default function AdminDashboard() {
         {isAdmin && <button className="action-card" onClick={() => { setTab('members'); setEditingMember({}); }}><strong>+ Add a team member</strong><span>Create the public profile visitors will see.</span></button>}
         {!isAdmin && !needsProfile && <button className="action-card" onClick={() => setTab('members')}><strong>Edit my profile</strong><span>Update your bio, skills and links.</span></button>}
         <button className="action-card" onClick={() => { setTab('projects'); setEditingProject({}); }}><strong>+ Add a project</strong><span>Show work the group has done.</span></button>
-        {isAdmin && <button className="action-card" onClick={() => setTab('users')}><strong>Invite an account</strong><span>Let someone log in. They set their own password.</span></button>}
+        {isAdmin && <button className="action-card" onClick={() => setTab('users')}><strong>Invite an account</strong><span>Let someone log in, with a password you set or a setup email.</span></button>}
         {isAdmin && <button className="action-card" onClick={() => setTab('settings')}><strong>Edit site settings</strong><span>Group name, tagline, contact and social links.</span></button>}
       </div>
       <h2>Your site at a glance</h2>
@@ -142,7 +167,7 @@ export default function AdminDashboard() {
         <div className="stat-card"><strong>{unread}</strong><span>Unread messages</span></div>
         <div className="stat-card"><strong>{users.length}</strong><span>Sign-in accounts</span></div>
       </div>
-      <div className="card"><h2>How publishing works — in plain words</h2><p>1. Save here — your change is stored in the database right away.<br />2. Rebuild the site in Netlify (Deploys → Trigger deploy).<br />3. About a minute later, visitors see the new version.</p><p className="muted">Saving alone does not update the public site instantly, because the public site is a static export. Drafts, private resumes, messages and history never appear on public pages.</p></div>
+      <div className="card"><h2>How publishing works — in plain words</h2><p>Save here, and visitors see it on their next page load. No rebuild, no manual deploy — public pages fetch the latest data from the backend every time they load, including a brand-new profile or project page.</p><p className="muted">Drafts, private resumes, messages and history never appear on public pages.</p></div>
       {isAdmin && (<div className="card"><h2>First steps checklist</h2><p>{settings?.group_name ? '✓' : '○'} Site settings filled in<br />{members.length > 0 ? '✓' : '○'} At least one team member<br />{projects.length > 0 ? '✓' : '○'} At least one project<br />{members.some((m) => m.status === 'published') ? '✓' : '○'} At least one member published (not just draft)</p></div>)}
     </div>)}
 
@@ -169,9 +194,11 @@ export default function AdminDashboard() {
 
     {tab === 'users' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>
       <p className="muted">Two things, kept separate: <strong>a sign-in account</strong> lets a person log in, and <strong>a team profile</strong> is what visitors see. Link them here so a member can edit their own profile. You cannot change your own account from this page — the server will refuse it.</p>
-      <form onSubmit={sendInvite}><h2>Invite an account</h2><p className="muted">Only an admin can create accounts. There is no public sign-up. The person sets their own password — you do not set it, and you never see it.</p>
+      <form onSubmit={sendInvite}><h2>Invite an account</h2><p className="muted">Only an admin can create accounts. There is no public sign-up. You can set a password here, or leave it blank and a password setup email will be sent automatically.</p>
         <label>Name<input required value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></label>
         <label>Email<input required type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></label>
+        <label>Password (optional, at least 6 characters)<input type="password" value={invite.password} onChange={(e) => setInvite({ ...invite, password: e.target.value })} placeholder="Leave blank to send a setup email instead" /></label>
+        <p className="muted">If you set a password, share it privately with this person — it will not be shown again, and it is not stored in the database. Ask them to change it after first login (login page → Forgot password).</p>
         <label>Role<select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}><option value="member">Team member</option><option value="admin">Admin</option></select></label>
         <label>Link to a team profile (optional)<select value={invite.member_id} onChange={(e) => setInvite({ ...invite, member_id: e.target.value })}><option value="">No profile yet — they can create their own later</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
         <p className="muted">If you leave the profile unlinked, the member will see “Create my profile” after logging in, and their profile will be saved as a draft for you to publish.</p>
@@ -182,9 +209,11 @@ export default function AdminDashboard() {
       <div className="grid">{users.map((u) => { const linked = members.find((m) => m.id === u.member_id); return (<div className="card" key={u.id}><h3>{u.name || u.email}</h3><p className="muted">{u.email} · {u.role} · {u.account_status}</p><p className="muted">Profile: {linked ? linked.full_name : 'Not linked yet'}</p>
         <label>Link profile<select value={linkDraft[u.id] ?? u.member_id ?? ''} onChange={(e) => setLinkDraft({ ...linkDraft, [u.id]: e.target.value })}><option value="">No profile</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
         <p><button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { member_id: linkDraft[u.id] ?? u.member_id ?? '' })}>Save link</button>{' '}
-        {u.account_status === 'invited' && <><button className="btn secondary small" onClick={() => userAction(u.id, 'resend')}>Resend</button>{' '}<button className="btn secondary small" onClick={() => userAction(u.id, 'revoke')}>Revoke</button>{' '}</>}
+        {u.account_status === 'invited' && <><button className="btn secondary small" onClick={() => userAction(u.id, 'resend', undefined, u.email)}>Resend setup email</button>{' '}<button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>Activate</button>{' '}<button className="btn secondary small" onClick={() => userAction(u.id, 'revoke')}>Revoke</button>{' '}</>}
         {u.account_status === 'active' && <button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'deactivated' })}>Deactivate</button>}
-        {u.account_status === 'deactivated' && <button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>Reactivate</button>}</p></div>); })}</div>
+        {u.account_status === 'deactivated' && <button className="btn secondary small" onClick={() => userAction(u.id, 'patch', { account_status: 'active' })}>Reactivate</button>}</p>
+        <label>Set / reset password<input type="password" value={passwordDraft[u.id] || ''} onChange={(e) => setPasswordDraft({ ...passwordDraft, [u.id]: e.target.value })} placeholder="At least 6 characters" /></label>
+        <p><button className="btn secondary small" onClick={() => setAccountPassword(u.id)}>Set password</button><span className="muted"> Share it privately — it is not shown again.</span></p></div>); })}</div>
       {!users.length && <p className="muted">No accounts yet, or the backend could not list them.</p>}</div>))}
 
     {tab === 'messages' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>{messages.map((m) => (<div className="card" key={m.id}><strong>{m.name} ({m.email})</strong> <span className="muted">{m.read ? 'Read' : 'Unread'} · {m.created_at}</span><p>{m.subject}</p><p>{m.message}</p>

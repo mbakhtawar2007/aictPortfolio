@@ -1,6 +1,7 @@
 import { authAdmin, firebaseEnabled, demoMode } from './firebase.js';
 import { store } from './store.js';
 import { fail } from './validate.js';
+import { audit } from './audit.js';
 // Demo test identities — accepted ONLY when DEMO_MODE=true and Firebase
 // is NOT enabled. This block must never run in production: set
 // DEMO_MODE=false (or unset) in Vercel, and FIREBASE_ENABLED=true.
@@ -28,6 +29,15 @@ export function requireAuth(handler) {
     try {
       const actor = await loadActor(req);
       if (!actor) return fail(res, 401, 'unauthenticated', 'Sign in is required.');
+      // First-login activation: an invited account has a valid Firebase
+      // token only after its password was set (by the admin, or via a
+      // setup link), so that first valid token safely activates it.
+      // This removes the extra admin activation step for new members.
+      // Deactivated accounts are never auto-activated.
+      if (actor.account_status === 'invited') {
+        try { await store.saveRole(actor.uid, { account_status: 'active' }); await audit(store, { user_id: actor.uid, action: 'user.activated_first_login', entity: 'user_roles', entity_id: actor.uid }); } catch { /* retry on the next request */ }
+        actor.account_status = 'active';
+      }
       if (actor.account_status !== 'active') return fail(res, 403, 'account_not_active', 'This account is not active.');
       req.actor = actor; return handler(req, res, next);
     } catch { return fail(res, 503, 'auth_unavailable', 'Authentication is temporarily unavailable.'); }

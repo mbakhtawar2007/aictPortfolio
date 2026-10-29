@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import type { Project, Member } from '../../../lib/types';
 import { Loading, ErrorBox, SampleBadge } from '../../shared';
+import { sampleMembers, sampleProjects } from '../../../lib/sample';
 import { SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function ProjectDetail({ slug }: { slug: string }) {
   const [p, setP] = useState<Project | null>(null); const [members, setMembers] = useState<Member[]>([]);
@@ -19,8 +20,9 @@ export default function ProjectDetail({ slug }: { slug: string }) {
         ? decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || slug)
         : slug;
       const [r, m, a] = await Promise.all([apiGet<Project>(`/projects/${actualSlug}`), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects')]);
-      if (r.error) setError(r.error.message); else setP(r.data);
-      setMembers(m.data || []); setAll(a.data || []);
+      const project = (!r.error && r.data) ? r.data : sampleProjects.find((x) => x.slug === actualSlug) || null;
+      if (!project) setError(r.error ? r.error.message : 'Project not found.'); else setP(project);
+      setMembers(m.data && m.data.length ? m.data : sampleMembers); setAll(a.data && a.data.length ? a.data : sampleProjects);
       setLoading(false);
     })();
   }, [slug]);

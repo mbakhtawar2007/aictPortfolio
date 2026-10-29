@@ -77,3 +77,19 @@ test('invite page is token-gated, not a public signup', () => {
   assert.ok(!/createUserWithEmailAndPassword/.test(invite));
   assert.ok(/token/.test(invite));
 });
+
+test('public demo fallback exists, is realistic (no placeholder wording), and home shows all members in a grid', () => {
+  const sample = read('lib/sample.ts');
+  assert.match(sample, /sampleMembers|sampleProjects/);
+  assert.ok(!/SAMPLE/.test(sample), 'demo fallback must not carry placeholder wording');
+  assert.ok(sampleMembersCount(sample) >= 3);
+  const home = read('app/page.tsx');
+  assert.ok(!/team-strip/.test(home), 'home must not hide members in a sideways strip');
+  assert.ok(!/hero-scene/.test(home), '3D hero scene removed for the minimal look');
+  assert.ok(/lib\/sample/.test(home));
+});
+function sampleMembersCount(src) { return (src.match(/slug: '/g) || []).length; }
+test('detail pages fall back to demo records for demo slugs', () => {
+  assert.match(read('app/team/[slug]/detail.tsx'), /sampleMembers\.find/);
+  assert.match(read('app/projects/[slug]/detail.tsx'), /sampleProjects\.find/);
+});

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
 import type { Member, Project, Achievement, SiteSettings } from '../lib/types';
 import { Loading, Empty, ErrorBox, SampleBadge, Section } from './shared';
+import { sampleMembers, sampleProjects, sampleAchievements, sampleSite } from '../lib/sample';
 import { SkeletonGrid } from '../components/ui';
 
 function Counter({ value }: { value: number }) {
@@ -25,10 +26,10 @@ export default function Home() {
   const load = async () => {
     setLoading(true); setSiteError(''); setMembersError(''); setProjectsError(''); setAchievementsError('');
     const [s, m, p, a] = await Promise.all([apiGet<SiteSettings>('/site'), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects'), apiGet<Achievement[]>('/achievements')]);
-    if (s.error) setSiteError(s.error.message); else setSite(s.data);
-    if (m.error) setMembersError(m.error.message); else setMembers(m.data || []);
-    if (p.error) setProjectsError(p.error.message); else setProjects(p.data || []);
-    if (a.error) setAchievementsError(a.error.message); else setAchievements(a.data || []);
+    if (s.error) setSiteError(s.error.message); else setSite(s.data || sampleSite);
+    if (m.error) setMembersError(m.error.message); else setMembers(m.data && m.data.length ? m.data : sampleMembers);
+    if (p.error) setProjectsError(p.error.message); else setProjects(p.data && p.data.length ? p.data : sampleProjects);
+    if (a.error) setAchievementsError(a.error.message); else setAchievements(a.data && a.data.length ? a.data : sampleAchievements);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -41,7 +42,6 @@ export default function Home() {
       <h2>We create <span className="hero-words" aria-label="AI videos, AI tools, websites, stories"><span>AI videos</span><span>AI tools</span><span>websites</span><span>stories</span></span></h2>
       <p>{site?.tagline || 'Who we are, what we build, and what we have achieved.'}</p>
       <p><a className="btn" href="/team">Meet the Team</a> <a className="btn secondary" href="/projects">View Projects</a></p>
-      <div className="hero-scene" aria-hidden="true"><div className="hero-grid" /><span className="hero-chip hero-chip-a">AI</span><span className="hero-chip hero-chip-b">&lt;/&gt;</span><span className="hero-chip hero-chip-c">{'{}'}</span><span className="hero-chip hero-chip-d">01</span></div>
     </div>
     {site?.hero_video_url && (<div style={{ marginTop: 24 }}><video controls src={site.hero_video_url} style={{ width: '100%', maxHeight: 420, objectFit: 'cover', borderRadius: 20 }} /></div>)}
     {siteError && (<div><ErrorBox message={siteError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">Site settings could not be loaded, so generic headings are shown. This is a failed request, not an empty site.</p></div>)}
@@ -49,9 +49,9 @@ export default function Home() {
     <Section title="What We Do"><div className="grid">
       {[['AI Video Creation', 'Short AI videos, showreels and visual stories made by the team.'], ['AI Projects', 'Practical AI tools and experiments, built and documented by members.'], ['Web Development', 'Websites and web apps, from design to a live, working product.'], ['Creative Storytelling', 'Ideas turned into stories told through video, visuals and words.']].map(([t, d]) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">{d}</p></div>))}
     </div></Section>
-    <Section title="Meet the Team">{membersError ? (<div><ErrorBox message={membersError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="team-strip">
+    <Section title="Meet the Team">{membersError ? (<div><ErrorBox message={membersError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="grid">
       {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}><span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span><h3><a href={`/team/${m.slug}`}>{m.full_name}</a> <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
-    </div>{members.length > 3 && <p className="muted">Scroll sideways to see more members →</p>}<p><a href="/team">See the full team →</a></p></>)}</Section>
+    </div><p><a href="/team">See the full team →</a></p></>)}</Section>
     <Section title="Featured Projects">{projectsError ? (<div><ErrorBox message={projectsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
       {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a> <SampleBadge isSample={p.isSample} /></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
     </div>)}</Section>
@@ -65,6 +65,6 @@ export default function Home() {
       {achievements.filter((a) => a.featured).map((a) => (<div className="card card-hover" key={a.id}><h3>{a.title} <SampleBadge isSample={a.isSample} /></h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p></div>))}
       {!achievements.filter((a) => a.featured).length && <Empty text="No featured achievements yet." />}
     </div>)}</Section>
-    <Section title="Contact"><p><a className="btn" href="/contact">Send a message</a> <a className="btn secondary" href="/team">Meet the team first</a></p><p className="muted">This site has no public sign-up.</p></Section>
+    <Section title="Contact"><p><a className="btn" href="/contact">Send a message</a> <a className="btn secondary" href="/team">Meet the team first</a></p></Section>
   </div>);
 }

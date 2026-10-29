@@ -4,10 +4,11 @@ import { apiGet } from '../../lib/api';
 import type { Member } from '../../lib/types';
 import { Empty, ErrorBox, SampleBadge } from '../shared';
 import { SkeletonGrid, Tabs } from '../../components/ui';
+import { sampleMembers } from '../../lib/sample';
 export default function SkillsPage() {
   const [members, setMembers] = useState<Member[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
   const [q, setQ] = useState(''); const [cat, setCat] = useState('All');
-  const load = () => { setLoading(true); setError(''); apiGet<Member[]>('/members').then((r) => { if (r.error) setError(r.error.message); else setMembers(r.data || []); setLoading(false); }); };
+  const load = () => { setLoading(true); setError(''); apiGet<Member[]>('/members').then((r) => { if (r.error) setError(r.error.message); else setMembers(r.data && r.data.length ? r.data : sampleMembers); setLoading(false); }); };
   useEffect(load, []);
   const cats = useMemo(() => ['All', ...Array.from(new Set(members.flatMap((m) => (m.skills || []).map((s) => s.category || 'Technical'))))], [members]);
   const rows = useMemo(() => {

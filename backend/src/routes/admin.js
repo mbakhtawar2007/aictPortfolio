@@ -1,5 +1,5 @@
 import express from 'express';
-import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, mediaMetaSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema } from '../validate.js';
+import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, userPatchSchema, uploadSignSchema, mediaMetaSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema } from '../validate.js';
 import { store, isFirebase } from '../store.js';
 import { authAdmin, firebaseEnabled, demoMode } from '../firebase.js';
 import { requireAdmin, requireMemberOrAdmin, canEditMember, canEditProject } from '../auth.js';
@@ -357,51 +357,6 @@ adminRouter.post('/users/invite-links/:id/revoke', requireAdmin(async (req, res)
   catch { return fail(res, 503, 'unavailable', 'Invitation could not be revoked.'); }
 }));
 adminRouter.get('/users', requireAdmin(async (req, res) => { try { return ok(res, await store.rolesAll()); } catch { return fail(res, 503, 'unavailable', 'Accounts are temporarily unavailable.'); } }));
-adminRouter.post('/users/invite', requireAdmin(async (req, res) => {
-  const p = parseBody(inviteSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  const { email, role, member_id, name, password } = p.data;
-  // Audit fix 2026-10-29: an invite linked to a nonexistent profile would
-  // leave the new account pointing at nothing (empty member page). Verify
-  // the profile exists first, like PATCH /users/:id does.
-  if (member_id) { const profile = await store.memberById(member_id); if (!profile) return fail(res, 404, 'not_found', 'The linked team profile does not exist.'); }
-  try {
-    // Idempotency: never create a duplicate for an already-invited/active email.
-    // Use the separate set-password endpoint for an existing account.
-    const existing = await store.roleByEmail(email);
-    if (existing) {
-      // Audit fix 2026-10-29 (security review): the old early return
-      // silently ignored an admin-set password for an existing account.
-      let passwordApplied = false;
-      if (password && isFirebase()) { try { await authAdmin().updateUser(existing.id, { password }); passwordApplied = true; } catch { /* recorded below via audit; response stays honest */ } }
-      await audit(store, { user_id: req.actor.uid, action: 'user.invite_existing', entity: 'user_roles', entity_id: existing.id });
-      return ok(res, { ...existing, already_exists: true, password_set_by_admin: passwordApplied });
-    }
-    let uid;
-    if (isFirebase()) {
-      const auth = authAdmin();
-      try {
-        const u = await auth.getUserByEmail(email); uid = u.uid;
-        if (password) await auth.updateUser(uid, { password });
-      } catch { const u = await auth.createUser({ email, displayName: name, disabled: false, ...(password ? { password } : {}) }); uid = u.uid; }
-      // Only generate/send a setup link when the admin did NOT set a
-      // password. Passwords are never returned in an API response.
-      if (!password) {
-        try {
-          const link = await auth.generatePasswordResetLink(email);
-          if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
-            const { Resend } = await import('resend');
-            await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: email, subject: 'Your AICT portfolio account', text: `You have been invited to the AICT group portfolio. Set your password here: ${link}` });
-          }
-        } catch { /* link/email failure is recorded below, invite row still stands */ }
-      }
-    } else {
-      uid = `demo-user-${email.replace(/[^a-z0-9]/gi, '-')}`;
-    }
-    const row = await store.saveRole(uid, { email, name, role, account_status: 'invited', invited_by: req.actor.uid, invited_at: new Date().toISOString(), member_id: member_id || '' });
-    const invAudit = await audit(store, { user_id: req.actor.uid, action: 'user.invite', entity: 'user_roles', entity_id: uid });
-    return ok(res, { ...row, password_set_by_admin: Boolean(password), email_delivery: password ? 'admin_set_password' : (isFirebase() && process.env.RESEND_API_KEY ? 'attempted' : 'not_configured'), ...(invAudit.ok ? {} : { audit_failed: true }) }, 201);
-  } catch { return fail(res, 503, 'unavailable', 'The invitation could not be created.'); }
-}));
 // Set or reset another account's password (admin only, never your own).
 // The password is used once via the Firebase Admin SDK and is never
 // stored in Firestore, logged, or returned. Share it privately, and ask

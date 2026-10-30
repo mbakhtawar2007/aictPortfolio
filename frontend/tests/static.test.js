@@ -125,3 +125,11 @@ test('account delete: admin users tab has a Delete button wired to DELETE /admin
   assert.ok(admin.includes('This is your account.'));
   assert.ok(admin.includes('Delete the sign-in account for'));
 });
+
+test('single creation path: only the invitation link form creates accounts', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.ok(admin.includes('Invite a team member'));
+  assert.ok(!admin.includes("users/invite', 'POST'"));
+  assert.ok(!admin.includes('onSubmit={sendInvite}'));
+  assert.ok(admin.includes("linkInvite.confirmAdmin"));
+});

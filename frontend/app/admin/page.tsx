@@ -50,11 +50,10 @@ export default function AdminDashboard() {
   const [editingProject, setEditingProject] = useState<Partial<Project> | null | undefined>(undefined);
   const [editingAchievement, setEditingAchievement] = useState<Partial<Achievement> | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<{ kind: string; id: string; label: string; text?: string } | null>(null); const [deleteBusy, setDeleteBusy] = useState(false);
-  const [invite, setInvite] = useState({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); const [inviteBusy, setInviteBusy] = useState(false); const [inviteNote, setInviteNote] = useState('');
   // Invite-link flow (2026-10-29): the recipient creates their own account
   // from a link, instead of the admin setting a password or sending a
   // Firebase setup email. The link is shown once, at creation.
-  const [linkInvite, setLinkInvite] = useState({ name: '', email: '', role: 'member', member_id: '' });
+  const [linkInvite, setLinkInvite] = useState({ name: '', email: '', role: 'member', member_id: '', confirmAdmin: false });
   const [linkBusy, setLinkBusy] = useState(false); const [linkNote, setLinkNote] = useState('');
   const [linkUrl, setLinkUrl] = useState(''); const [linkEmail, setLinkEmail] = useState('');
   const [pendingLinks, setPendingLinks] = useState<Array<Record<string, unknown>>>([]); const [linksError, setLinksError] = useState('');
@@ -106,29 +105,10 @@ export default function AdminDashboard() {
     const r = await apiSend(path, 'DELETE', {}, true); setDeleteBusy(false);
     if (r.error) { push('error', r.error.message); } else { push('success', 'Deleted.'); setDeleting(null); reload(); }
   }
-  async function sendInvite(e: React.FormEvent) {
-    e.preventDefault();
-    if (invite.role === 'admin' && !invite.confirmAdmin) { push('error', 'Tick the confirmation before inviting an admin.'); return; }
-    if (!invite.name.trim() || !invite.email.trim()) { push('error', 'Name and email are required.'); return; }
-    if (invite.password && invite.password.length < 6) { push('error', 'Password must be at least 6 characters, or leave it blank.'); return; }
-    setInviteBusy(true); setInviteNote('');
-    const r = await apiSend('/admin/users/invite', 'POST', { name: invite.name, email: invite.email, role: invite.role, member_id: invite.member_id, ...(invite.password ? { password: invite.password } : {}) }, true);
-    setInviteBusy(false);
-    if (r.error) { push('error', r.error.message); return; }
-    const delivery = (r.data as Record<string, unknown> | undefined)?.email_delivery;
-    if (delivery === 'admin_set_password') setInviteNote('Account created with the password you set. Share it privately with this person — it will not be shown again. Ask them to change it after first login (login page → Forgot password).');
-    else if (delivery === 'not_configured') {
-      // No Resend configured, so send Firebase's own password-setup email
-      // automatically from this page — no Firebase Console step needed.
-      try { await sendPasswordSetupEmail(invite.email); setInviteNote('Account created. A password setup email has been sent to them automatically — they click the link and set their own password. You never see it, and you do not need to open Firebase Console.'); }
-      catch (e) { setInviteNote(`Account created, but the automatic password email could not be sent (${e instanceof Error ? e.message : 'unknown error'}). As a fallback, send a password link from Firebase Console → Authentication → that user → Reset password.`); }
-    } else setInviteNote('Account created. The person will receive a link to set their own password.');
-    push('success', 'Invitation created. Sending the same invitation again does not create a duplicate.');
-    setInvite({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); reload();
-  }
   async function sendLinkInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!linkInvite.name.trim() || !linkInvite.email.trim()) { push('error', 'Name and email are required.'); return; }
+    if (linkInvite.role === 'admin' && !linkInvite.confirmAdmin) { push('error', 'Tick the confirmation before inviting an admin.'); return; }
     setLinkBusy(true); setLinkNote(''); setLinkUrl('');
     const r = await apiSend('/admin/users/invite-link', 'POST', { name: linkInvite.name, email: linkInvite.email, role: linkInvite.role, member_id: linkInvite.member_id }, true);
     setLinkBusy(false);
@@ -136,7 +116,7 @@ export default function AdminDashboard() {
     const d = r.data as Record<string, unknown>;
     setLinkUrl(String(d.invite_link || '')); setLinkEmail(linkInvite.email);
     setLinkNote(d.email_delivery === 'attempted' ? 'Invitation link created and an email was sent. You can also copy the link below.' : 'Invitation link created. No automatic email was sent (Resend is not configured), so send this link to them yourself — the Gmail button opens a ready-to-send email with the link inside.');
-    setLinkInvite({ name: '', email: '', role: 'member', member_id: '' }); reload();
+    setLinkInvite({ name: '', email: '', role: 'member', member_id: '', confirmAdmin: false }); reload();
   }
   async function revokeLink(id: string) {
     const key = `link-${id}`; if (pending[key]) return; setPending((x) => ({ ...x, [key]: true }));
@@ -265,21 +245,11 @@ export default function AdminDashboard() {
 
     {tab === 'users' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>
       <p className="muted">Two things, kept separate: <strong>a sign-in account</strong> lets a person log in, and <strong>a team profile</strong> is what visitors see. Link them here so a member can edit their own profile. You cannot change your own account from this page — the server will refuse it.</p>
-      <form onSubmit={sendInvite}><h2>Invite an account</h2><p className="muted">Only an admin can create accounts. There is no public sign-up. You can set a password here, or leave it blank and a password setup email will be sent automatically. Choose this form to set the password yourself; choose 'Invite via link' below to let them choose their own.</p>
-        <label>Name<input required value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></label>
-        <label>Email<input required type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></label>
-        <label>Password (optional, at least 6 characters)<input type="password" value={invite.password} onChange={(e) => setInvite({ ...invite, password: e.target.value })} placeholder="Leave blank to send a setup email instead" /></label>
-        <p className="muted">If you set a password, share it privately with this person — it will not be shown again, and it is not stored in the database. Ask them to change it after first login (login page → Forgot password).</p>
-        <label>Role<select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}><option value="member">Team member</option><option value="admin">Admin</option></select></label>
-        <label>Link to a team profile (optional)<select value={invite.member_id} onChange={(e) => setInvite({ ...invite, member_id: e.target.value })}><option value="">No profile yet — they can create their own later</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
-        <p className="muted">If you leave the profile unlinked, the member will see “Create my profile” after logging in, and their profile will be saved as a draft for you to publish.</p>
-        {invite.role === 'admin' && <label><input type="checkbox" checked={invite.confirmAdmin} onChange={(e) => setInvite({ ...invite, confirmAdmin: e.target.checked })} /> I deliberately confirm granting admin — this is not the default.</label>}
-        <p><button className="btn" disabled={inviteBusy}>{inviteBusy ? 'Sending…' : 'Send invitation'}</button></p>
-        {inviteNote && <p className="success">{inviteNote}</p>}</form>
-      <form onSubmit={sendLinkInvite}><h2>Invite via link (recommended)</h2><p className="muted">The person gets a link, opens it, and creates their own account with a password they choose. Their email and role are fixed by you and cannot be changed on that page. The link expires after 7 days and works only once.</p>
+      <form onSubmit={sendLinkInvite}><h2>Invite a team member</h2><p className="muted">The person gets a link, opens it, and creates their own account with a password they choose. Their email and role are fixed by you and cannot be changed on that page. The link expires after 7 days and works only once.</p>
         <label>Name<input required value={linkInvite.name} onChange={(e) => setLinkInvite({ ...linkInvite, name: e.target.value })} /></label>
         <label>Email<input required type="email" value={linkInvite.email} onChange={(e) => setLinkInvite({ ...linkInvite, email: e.target.value })} /></label>
         <label>Role<select value={linkInvite.role} onChange={(e) => setLinkInvite({ ...linkInvite, role: e.target.value })}><option value="member">Team member</option><option value="admin">Admin</option></select></label>
+        {linkInvite.role === 'admin' && <label><input type="checkbox" checked={linkInvite.confirmAdmin} onChange={(e) => setLinkInvite({ ...linkInvite, confirmAdmin: e.target.checked })} /> I deliberately confirm granting admin — this is not the default.</label>}
         <label>Link to a team profile (optional)<select value={linkInvite.member_id} onChange={(e) => setLinkInvite({ ...linkInvite, member_id: e.target.value })}><option value="">No profile yet — they can create their own later</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
         <p><button className="btn" disabled={linkBusy}>{linkBusy ? 'Creating…' : 'Create invitation link'}</button></p>
         {linkNote && <p className="success">{linkNote}</p>}

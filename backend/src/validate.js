@@ -88,15 +88,6 @@ export const contactSchema = z.object({
   subject: z.string().max(300).optional().default(''), message: z.string().trim().min(1).max(5000),
   website: z.string().optional().default(''), // honeypot: must stay empty
 });
-export const inviteSchema = z.object({
-  name: z.string().min(1).max(200), email: z.string().email(),
-  role: z.enum(['admin', 'member']).optional().default('member'),
-  member_id: z.string().optional().default(''),
-  // Admin-set password (optional). Firebase requires at least 6 characters.
-  // It is used once to create/update the Auth user and is never stored in
-  // Firestore, logged, or returned in an API response.
-  password: z.string().min(6).max(128).optional(),
-});
 export const setPasswordSchema = z.object({
   password: z.string().min(6).max(128),
 });

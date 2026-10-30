@@ -117,3 +117,11 @@ test('gallery: public page exists, nav links it, media details and delete are wi
   assert.match(read('app/admin/page.tsx'), /kind === 'media'/);
   assert.match(read('app/member/page.tsx'), /media\/meta/);
 });
+
+test('account delete: admin users tab has a Delete button wired to DELETE /admin/users/:id', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.ok(admin.includes("kind: 'user'"));
+  assert.ok(admin.includes('/admin/users/${deleting.id}'));
+  assert.ok(admin.includes('This is your account.'));
+  assert.ok(admin.includes('Delete the sign-in account for'));
+});

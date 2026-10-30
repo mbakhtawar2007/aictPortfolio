@@ -218,3 +218,21 @@ test('media details: admin saves details, member cannot save details for another
   const gal = await call('GET', '/api/gallery');
   assert.equal(gal.status, 503);
 });
+
+test('account delete: self 403, unknown 404, member 403, full delete removes the role row', async () => {
+  assert.equal((await call('DELETE', '/api/admin/users/demo-admin', ADMIN)).status, 403);
+  assert.equal((await call('DELETE', '/api/admin/users/no-such-user', ADMIN)).status, 404);
+  assert.equal((await call('DELETE', '/api/admin/users/no-such-user', MEMBER)).status, 403);
+  const created = await call('POST', '/api/admin/users/invite-link', ADMIN, { email: 'delme@example.local', name: 'Del Me', role: 'member' });
+  assert.equal(created.status, 201);
+  const token = created.json.data.invite_link.split('token=')[1];
+  const accepted = await call('POST', '/api/invite/accept', null, { token, password: 'delpass123' });
+  assert.equal(accepted.status, 200);
+  const uid = 'demo-user-delme-example-local';
+  const before = await call('GET', '/api/admin/users', ADMIN);
+  assert.ok(before.json.data.some((u) => u.id === uid));
+  const del = await call('DELETE', `/api/admin/users/${uid}`, ADMIN);
+  assert.equal(del.status, 200); assert.equal(del.json.data.deleted, true);
+  const after = await call('GET', '/api/admin/users', ADMIN);
+  assert.ok(!after.json.data.some((u) => u.id === uid));
+});

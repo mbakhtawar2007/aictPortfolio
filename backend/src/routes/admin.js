@@ -431,6 +431,29 @@ adminRouter.patch('/users/:id', requireAdmin(async (req, res) => {
   }
   try { const row = await store.saveRole(req.params.id, p.data); const upAudit = await audit(store, { user_id: req.actor.uid, action: 'user.update', entity: 'user_roles', entity_id: req.params.id }); return ok(res, upAudit.ok ? row : { ...row, audit_failed: true }); } catch { return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
 }));
+adminRouter.delete('/users/:id', requireAdmin(async (req, res) => {
+  // Account deletion: removes the sign-in account permanently. A linked
+  // team profile is NOT deleted — deleting the role row unlinks it, so
+  // the profile stays on the site without an owner account. Pending
+  // invitation links for the same email are revoked first, so a stale
+  // link cannot resurrect the account. The order is retry-safe: the
+  // Firebase delete tolerates an already-missing user, so a partway
+  // failure can simply be retried.
+  if (req.params.id === req.actor.uid) return fail(res, 403, 'forbidden', 'You cannot delete your own account.');
+  const row = await store.roleByUid(req.params.id);
+  if (!row) return fail(res, 404, 'not_found', 'Account not found.');
+  try {
+    if (isFirebase()) {
+      try { await authAdmin().deleteUser(req.params.id); }
+      catch (e) { const code = e && e.code ? e.code : ''; if (code !== 'auth/user-not-found') throw e; }
+    }
+    const links = await store.invitesAll();
+    for (const l of links) { if (l.email === row.email && !l.used && !l.revoked) { try { await store.markInviteRevoked(l.id); } catch { /* revoked on retry */ } } }
+    await store.deleteRole(req.params.id);
+    await audit(store, { user_id: req.actor.uid, action: 'user.deleted', entity: 'user_roles', entity_id: req.params.id });
+    return ok(res, { deleted: true });
+  } catch { return fail(res, 503, 'unavailable', 'Account could not be deleted.'); }
+}));
 adminRouter.post('/users/:id/resend-invite', requireAdmin(async (req, res) => {
   try {
     const row = await store.roleByUid(req.params.id); if (!row) return fail(res, 404, 'not_found', 'Account not found.');

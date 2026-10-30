@@ -128,6 +128,7 @@ export const store = {
   async messagesAll() { if (isFirebase()) { const s = await db().collection('contact_messages').orderBy('created_at', 'desc').get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); } return demoStore().messages; },
   async addMessage(v) { if (isFirebase()) { const ref = await db().collection('contact_messages').add(v); return { id: ref.id, ...v }; } const row = { id: `msg-${Date.now()}`, ...v }; demoStore().messages.push(row); return row; },
   async rolesAll() { if (isFirebase()) { const s = await db().collection('user_roles').get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); } return demoStore().roles; },
+  async deleteRole(uid) { if (isFirebase()) { await db().collection('user_roles').doc(uid).delete(); return; } const d = demoStore(); d.roles = d.roles.filter((r) => r.id !== uid && r.uid !== uid); },
   async roleByUid(uid) { if (isFirebase()) { const s = await db().collection('user_roles').doc(uid).get(); return s.exists ? { id: s.id, ...s.data() } : null; } return demoStore().roles.find((r) => r.id === uid || r.uid === uid) || null; },
   async roleByEmail(email) { const all = await this.rolesAll(); return all.find((r) => r.email === email) || null; },
   async saveRole(uid, v) { if (isFirebase()) { await db().collection('user_roles').doc(uid).set({ ...v, uid }, { merge: true }); return { id: uid, ...v }; } const d = demoStore(); const ex = d.roles.find((r) => r.id === uid); if (ex) Object.assign(ex, v); else { const row = { id: uid, uid, ...v }; d.roles.push(row); return row; } return ex; },

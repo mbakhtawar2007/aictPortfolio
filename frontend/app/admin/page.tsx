@@ -18,7 +18,7 @@ const TAB_LABEL: Record<Tab, string> = { overview: 'Start here', members: 'Team 
 export default function AdminDashboard() {
   const { toasts, push, dismiss } = useToasts();
   const [token, setToken] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); const [meUid, setMeUid] = useState('');
   const [members, setMembers] = useState<Member[]>([]); const [projects, setProjects] = useState<Project[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]); const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [users, setUsers] = useState<UserRole[]>([]); const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   const [selfCreate, setSelfCreate] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null | undefined>(undefined);
   const [editingAchievement, setEditingAchievement] = useState<Partial<Achievement> | null | undefined>(undefined);
-  const [deleting, setDeleting] = useState<{ kind: string; id: string; label: string } | null>(null); const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleting, setDeleting] = useState<{ kind: string; id: string; label: string; text?: string } | null>(null); const [deleteBusy, setDeleteBusy] = useState(false);
   const [invite, setInvite] = useState({ name: '', email: '', role: 'member', member_id: '', password: '', confirmAdmin: false }); const [inviteBusy, setInviteBusy] = useState(false); const [inviteNote, setInviteNote] = useState('');
   // Invite-link flow (2026-10-29): the recipient creates their own account
   // from a link, instead of the admin setting a password or sending a
@@ -77,7 +77,7 @@ export default function AdminDashboard() {
       if (me.error.code === 'unauthenticated') { window.location.href = '/login'; return; }
       setGateError(me.error.message); setLoading(false); return;
     }
-    setIsAdmin(me.data?.role === 'admin');
+    setIsAdmin(me.data?.role === 'admin'); setMeUid((me.data as { uid?: string } | undefined)?.uid || '');
     const [m, p, a, msg, u, s, au, rev, med] = await Promise.all([
       apiGet<Member[]>('/admin/members', true), apiGet<Project[]>('/admin/projects', true), apiGet<Achievement[]>('/admin/achievements', true),
       apiGet<ContactMessage[]>('/admin/messages', true), apiGet<UserRole[]>('/admin/users', true), apiGet<SiteSettings>('/admin/settings', true),
@@ -102,7 +102,7 @@ export default function AdminDashboard() {
 
   async function doDelete() {
     if (!deleting) return; setDeleteBusy(true);
-    const path = deleting.kind === 'member' ? `/admin/members/${deleting.id}` : deleting.kind === 'project' ? `/admin/projects/${deleting.id}` : deleting.kind === 'achievement' ? `/admin/achievements/${deleting.id}` : deleting.kind === 'media' ? `/admin/media?public_id=${encodeURIComponent(deleting.id)}` : `/admin/messages/${deleting.id}`;
+    const path = deleting.kind === 'member' ? `/admin/members/${deleting.id}` : deleting.kind === 'project' ? `/admin/projects/${deleting.id}` : deleting.kind === 'achievement' ? `/admin/achievements/${deleting.id}` : deleting.kind === 'media' ? `/admin/media?public_id=${encodeURIComponent(deleting.id)}` : deleting.kind === 'user' ? `/admin/users/${deleting.id}` : `/admin/messages/${deleting.id}`;
     const r = await apiSend(path, 'DELETE', {}, true); setDeleteBusy(false);
     if (r.error) { push('error', r.error.message); } else { push('success', 'Deleted.'); setDeleting(null); reload(); }
   }
@@ -288,7 +288,7 @@ export default function AdminDashboard() {
       <h2>Pending invitation links</h2>
       <div className="grid">{pendingLinks.filter((l) => !l.used && !l.revoked).map((l) => (<div className="card" key={String(l.id)}><h3>{String(l.name || l.email)}</h3><p className="muted">{String(l.email)} · {String(l.role) === 'admin' ? 'Admin' : 'Team member'} · expires {new Date(String(l.expires_at)).toLocaleDateString()}</p><p><button className="btn secondary small" disabled={!!pending[`link-${String(l.id)}`]} onClick={() => revokeLink(String(l.id))}>{pending[`link-${String(l.id)}`] ? 'Working…' : 'Revoke link'}</button></p></div>))}</div>
       {!pendingLinks.filter((l) => !l.used && !l.revoked).length && <p className="muted">{linksError ? 'Pending links could not be loaded — try again.' : 'No pending invitation links.'}</p>}
-      <h2>Accounts</h2><p className="muted">Resend setup email sends the password email again. Activate marks an invited account active, but the person still needs a password — set one below or send the setup email. Revoke cancels an invitation and deactivates the account; Deactivate blocks sign-in until you Reactivate.</p>
+      <h2>Accounts</h2><p className="muted">Resend setup email sends the password email again. Activate marks an invited account active, but the person still needs a password — set one below or send the setup email. Revoke cancels an invitation and deactivates the account; Deactivate blocks sign-in until you Reactivate. Delete removes the sign-in account permanently; a linked team profile stays on the site but becomes unlinked.</p>
       <div className="grid">{users.map((u) => { const linked = members.find((m) => m.id === u.member_id); return (<div className="card" key={u.id}><div className="admin-member-head"><span className="avatar" aria-hidden="true">{(u.name || u.email || '?').trim().charAt(0).toUpperCase()}</span><h3>{u.name || u.email}</h3></div><p className="muted">{u.email} · {u.role === 'admin' ? 'Admin' : 'Team member'} · {u.account_status ? u.account_status.charAt(0).toUpperCase() + u.account_status.slice(1) : ''}</p><p className="muted">Profile: {linked ? linked.full_name : 'Not linked yet'}</p>
         <label>Link profile<select value={linkDraft[u.id] ?? u.member_id ?? ''} onChange={(e) => setLinkDraft({ ...linkDraft, [u.id]: e.target.value })}><option value="">No profile</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
         <p><button className="btn secondary small" disabled={!!pending[`user-${u.id}-link`]} onClick={() => userAction(u.id, 'link', { member_id: linkDraft[u.id] ?? u.member_id ?? '' }, undefined, linked ? `Profile linked to ${linked.full_name}.` : 'Profile unlinked.')}>{pending[`user-${u.id}-link`] ? 'Working…' : 'Save link'}</button>{' '}
@@ -297,7 +297,7 @@ export default function AdminDashboard() {
         {u.account_status === 'deactivated' && <button className="btn secondary small" disabled={!!pending[`user-${u.id}-reactivate`]} onClick={() => userAction(u.id, 'reactivate', { account_status: 'active' })}>{pending[`user-${u.id}-reactivate`] ? 'Working…' : 'Reactivate'}</button>}</p>
         <label>Set / reset password<input type="password" value={passwordDraft[u.id] || ''} onChange={(e) => setPasswordDraft({ ...passwordDraft, [u.id]: e.target.value })} placeholder="At least 6 characters" /></label>
         <label>Confirm password<input type="password" value={passwordConfirmDraft[u.id] || ''} onChange={(e) => setPasswordConfirmDraft({ ...passwordConfirmDraft, [u.id]: e.target.value })} placeholder="Repeat the password" /></label>
-        <p><button className="btn secondary small" disabled={!!pending[`pw-${u.id}`]} onClick={() => setAccountPassword(u.id)}>{pending[`pw-${u.id}`] ? 'Setting…' : 'Set password'}</button><span className="muted"> Share it privately — it is not shown again.</span></p></div>); })}</div>
+        <p><button className="btn secondary small" disabled={!!pending[`pw-${u.id}`]} onClick={() => setAccountPassword(u.id)}>{pending[`pw-${u.id}`] ? 'Setting…' : 'Set password'}</button><span className="muted"> Share it privately — it is not shown again.</span></p>{u.id === meUid ? <p className="muted">This is your account.</p> : <p><button className="btn secondary small" onClick={() => setDeleting({ kind: 'user', id: u.id, label: u.name || u.email || u.id, text: `Delete the sign-in account for "${u.name || u.email || u.id}" permanently? They will not be able to sign in again. Their team profile, if linked, stays on the site but becomes unlinked.` })}>Delete</button></p>}</div>); })}</div>
       {!users.length && !sectionErrors.users && <p className="muted">No accounts yet.</p>}</div>))}
 
     {tab === 'messages' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>{messages.map((m) => (<div className="card" key={m.id}><strong>{m.name} ({m.email})</strong> <span className="muted">{m.read ? 'Read' : 'Unread'} · {m.created_at}</span><p>{m.subject}</p><p>{m.message}</p>
@@ -331,7 +331,7 @@ export default function AdminDashboard() {
     {tab === 'settings' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (settings ? <SettingsForm initial={settings} onSaved={reload} push={push} /> : <p className="muted">Settings could not be loaded.</p>))}
 
     </div>
-    {deleting && <ConfirmDialog text={`Delete "${deleting.label}"? This cannot be undone from this dialog.`} busy={deleteBusy} onCancel={() => setDeleting(null)} onConfirm={doDelete} />}
+    {deleting && <ConfirmDialog text={deleting.text || `Delete "${deleting.label}"? This cannot be undone from this dialog.`} busy={deleteBusy} onCancel={() => setDeleting(null)} onConfirm={doDelete} />}
     {confirmUserAction && <ConfirmDialog text={confirmUserAction.label} busy={!!pending[`user-${confirmUserAction.id}-${confirmUserAction.kind}`]} onCancel={() => setConfirmUserAction(null)} onConfirm={() => { const c = confirmUserAction; setConfirmUserAction(null); if (c) userAction(c.id, c.kind, c.body); }} />}
     <Toasts toasts={toasts} dismiss={dismiss} />
   </div>);

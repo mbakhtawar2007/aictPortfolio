@@ -115,7 +115,7 @@ export default function AdminDashboard() {
     if (r.error) { push('error', r.error.message); return; }
     const d = r.data as Record<string, unknown>;
     setLinkUrl(String(d.invite_link || '')); setLinkEmail(linkInvite.email);
-    setLinkNote(d.email_delivery === 'attempted' ? 'Invitation link created and an email was sent. You can also copy the link below.' : 'Invitation link created. No automatic email was sent (Resend is not configured), so send this link to them yourself — the Gmail button opens a ready-to-send email with the link inside.');
+    setLinkNote(d.email_delivery === 'gmail' ? `Invitation link created and sent to ${linkInvite.email} via Gmail.` : d.email_delivery === 'attempted' ? 'Invitation link created and an email was sent. You can also copy the link below.' : d.email_delivery === 'failed' ? 'Invitation link created, but the automatic Gmail send failed — send it yourself with the buttons below.' : 'Invitation link created. No automatic email was sent (Gmail is not configured), so send this link to them yourself — the Gmail button opens a ready-to-send email with the link inside.');
     setLinkInvite({ name: '', email: '', role: 'member', member_id: '', confirmAdmin: false }); reload();
   }
   async function revokeLink(id: string) {

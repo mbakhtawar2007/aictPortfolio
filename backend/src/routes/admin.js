@@ -336,7 +336,18 @@ adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
   const base = process.env.PUBLIC_SITE_URL || 'https://aictportfollio.netlify.app';
   const inviteLink = `${base.replace(/\/$/, '')}/invite?token=${token}`;
   let emailDelivery = 'link_only';
-  if (isFirebase() && process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
+  // Automatic Gmail send (preferred): when the admin's Gmail App Password
+  // is configured, the invitation goes out from their own Gmail account —
+  // no third-party email service. Sending never blocks the link: on any
+  // failure the link is still returned and the admin can send it manually.
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+    try {
+      const nodemailer = (await import('nodemailer')).default;
+      const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
+      await transporter.sendMail({ from: `"AICT Group Portfolio" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your AICT portfolio invitation', text: `Hi${p.data.name ? ` ${p.data.name}` : ''},\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
+      emailDelivery = 'gmail';
+    } catch { emailDelivery = 'failed'; }
+  } else if (isFirebase() && process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
     try {
       const { Resend } = await import('resend');
       await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: p.data.email, subject: 'Your AICT portfolio invitation', text: `You have been invited to the AICT group portfolio. Create your account here (link expires in 7 days): ${inviteLink}` });

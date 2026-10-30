@@ -240,3 +240,10 @@ test('account delete: self 403, unknown 404, member 403, full delete removes the
 test('single creation path: the old admin-set-password invite endpoint is gone', async () => {
   assert.equal((await call('POST', '/api/admin/users/invite', ADMIN, { email: 'oldway@example.local', name: 'Old Way' })).status, 404);
 });
+
+test('invite link without mail configured returns the link with link_only delivery', async () => {
+  const created = await call('POST', '/api/admin/users/invite-link', ADMIN, { email: 'nolinkmail@example.local', name: 'No Mail', role: 'member' });
+  assert.equal(created.status, 201);
+  assert.equal(created.json.data.email_delivery, 'link_only');
+  assert.ok(created.json.data.invite_link.includes('/invite?token='));
+});

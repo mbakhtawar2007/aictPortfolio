@@ -133,3 +133,10 @@ test('single creation path: only the invitation link form creates accounts', () 
   assert.ok(!admin.includes('onSubmit={sendInvite}'));
   assert.ok(admin.includes("linkInvite.confirmAdmin"));
 });
+
+test('invite link delivery states: gmail success, gmail failure, and manual fallback are all messaged', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.ok(admin.includes("email_delivery === 'gmail'"));
+  assert.ok(admin.includes("email_delivery === 'failed'"));
+  assert.ok(admin.includes('via Gmail'));
+});

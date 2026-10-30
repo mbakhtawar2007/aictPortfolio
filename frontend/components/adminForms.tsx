@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { apiSend } from '../lib/api';
+import { uploadDirectFile } from '../lib/upload';
 import type { Member, Project, Achievement, SiteSettings } from '../lib/types';
 import { Field, Modal } from './ui';
 
@@ -37,6 +38,25 @@ async function saveForm(path: string, method: string, body: unknown, push: (k: '
 export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSetLeader }: { initial: Partial<Member> | null; onSaved: () => void; onCancel: () => void; push: (k: 'success' | 'error', t: string) => void; selfCreate?: boolean; canSetLeader?: boolean }) {
   const [f, setF] = useState<AnyObj>({ slug: '', full_name: '', role_title: '', short_intro: '', bio: '', photo_url: '', cover_url: '', location: '', availability: '', resume_path: '', resume_is_public: false, contact_email: '', contact_email_is_public: false, status: 'draft', is_leader: false, sort_order: 0, skills: [], education: [], experience: [], links: [], ...(initial || {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false); const [photoProgress, setPhotoProgress] = useState(0); const [photoError, setPhotoError] = useState(''); const [photoKey, setPhotoKey] = useState(0);
+  const [resumeBusy, setResumeBusy] = useState(false); const [resumeProgress, setResumeProgress] = useState(0); const [resumeError, setResumeError] = useState(''); const [resumeKey, setResumeKey] = useState(0);
+  const directUpload = async (file: File, kind: 'photo' | 'resume') => {
+    const isPhoto = kind === 'photo';
+    const setBusy = isPhoto ? setPhotoBusy : setResumeBusy;
+    const setProgress = isPhoto ? setPhotoProgress : setResumeProgress;
+    const setErr = isPhoto ? setPhotoError : setResumeError;
+    const bumpKey = isPhoto ? () => setPhotoKey((k) => k + 1) : () => setResumeKey((k) => k + 1);
+    setErr(''); setProgress(0); setBusy(true);
+    try {
+      const name = errText(f.full_name) || 'Member';
+      const url = await uploadDirectFile(file, isPhoto ? 'image' : 'pdf', setProgress, `${name} — ${isPhoto ? 'profile photo' : 'resume'}`);
+      set(isPhoto ? 'photo_url' : 'resume_path', url);
+      push('success', isPhoto ? 'Photo uploaded and added to your profile.' : 'Resume uploaded and added to your profile.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Upload failed.';
+      setErr(msg); push('error', msg);
+    } finally { setBusy(false); bumpKey(); }
+  };
   const isCreate = !initial?.id;
   // Minimal-create (2026-10-29): creating a member used to show the whole
   // profile form (photo, skills, education, experience, links). On create
@@ -80,10 +100,18 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     {!selfCreate && !canSetLeader && <p className="muted">Only an admin can publish — this stays a draft until an admin publishes it.</p>}
     {canSetLeader && <><Check label="Group leader" value={Boolean(f.is_leader)} onChange={(v) => set('is_leader', v)} /><p className="muted">Only one member can be the group leader. Choosing this removes it from anyone else.</p></>}
     <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} placeholder="Lower numbers appear first" /></section>
-    <section className="form-section"><h3>Photo & resume</h3><p className="muted">Upload first in Photos &amp; files, then paste the URL here.</p>
-    <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a URL from Uploads (admin page) or your uploads section" />
+    <section className="form-section"><h3>Photo & resume</h3><p className="muted">Pick a file from your device and it fills the URL automatically — or paste a URL by hand.</p>
+    <Text label="Photo URL" value={errText(f.photo_url)} onChange={(v) => set('photo_url', v)} placeholder="Paste a URL, or upload a photo below" />
+    <label className="field">Upload photo<input key={photoKey} type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void directUpload(file, 'photo'); }} /></label>
+    {photoBusy && <p>Uploading… {photoProgress}%</p>}
+    {photoError && <p className="error">{photoError}</p>}
+    {errText(f.photo_url).startsWith('http') && <p><img src={errText(f.photo_url)} alt="Profile photo preview" style={{ height: 64, borderRadius: 8 }} /></p>}
     <Text label="Cover URL" value={errText(f.cover_url)} onChange={(v) => set('cover_url', v)} />
-    <Text label="Resume URL (PDF)" value={errText(f.resume_path)} onChange={(v) => set('resume_path', v)} />
+    <Text label="Resume URL (PDF)" value={errText(f.resume_path)} onChange={(v) => set('resume_path', v)} placeholder="Paste a URL, or upload a resume below" />
+    <label className="field">Upload resume (PDF)<input key={resumeKey} type="file" accept="application/pdf" disabled={resumeBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void directUpload(file, 'resume'); }} /></label>
+    {resumeBusy && <p>Uploading… {resumeProgress}%</p>}
+    {resumeError && <p className="error">{resumeError}</p>}
+    {errText(f.resume_path).startsWith('http') && <p><a href={errText(f.resume_path)} target="_blank" rel="noreferrer">View uploaded resume</a></p>}
     <Check label="Resume is public" value={Boolean(f.resume_is_public)} onChange={(v) => set('resume_is_public', v)} /></section>
     <section className="form-section"><h3>Contact</h3>
     <Text label="Contact email" type="email" value={errText(f.contact_email)} onChange={(v) => set('contact_email', v)} error={errors.contact_email} />

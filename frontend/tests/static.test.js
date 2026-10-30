@@ -146,3 +146,17 @@ test('navbar has Admin login and Member login buttons (desktop + mobile menu)', 
   assert.ok(read('app/admin/login/page.tsx').includes('heading="Admin login"'));
   assert.ok(read('styles/globals.css').includes('.nav-login { display: none; }'));
 });
+
+test('profile form has direct photo and resume upload from the device', () => {
+  const forms = read('components/adminForms.tsx');
+  assert.ok(forms.includes("import { uploadDirectFile } from '../lib/upload'"));
+  assert.ok(forms.includes('Upload photo'));
+  assert.ok(forms.includes('accept="image/jpeg,image/png,image/webp,image/avif"'));
+  assert.ok(forms.includes('Upload resume (PDF)'));
+  assert.ok(forms.includes('accept="application/pdf"'));
+  assert.ok(forms.includes("set('photo_url', url)") || forms.includes('photo_url'));
+  const up = read('lib/upload.ts');
+  assert.ok(up.includes('export async function uploadDirectFile'));
+  assert.ok(up.includes('/admin/upload/sign'));
+  assert.ok(up.includes('/admin/upload/verify'));
+});

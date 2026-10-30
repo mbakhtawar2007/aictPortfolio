@@ -186,6 +186,10 @@ test('cosmic theme: deep-space dark default, Inter only, cosmic palette', () => 
 test('cosmic theme: background is client-only, hidden on signed-in routes, respects motion and visibility', () => {
   const loader = read('components/Scene/CosmicBackgroundLoader.tsx');
   assert.ok(loader.includes("dynamic(() => import('./CosmicBackground'), { ssr: false"), 'no SSR for three.js');
+  assert.ok(!loader.includes('data-theme'), 'loader does not gate the canvas on theme');
+  const css = read('styles/globals.css');
+  assert.ok(css.includes("[data-theme='light'] .cosmic-fallback"), 'no-WebGL fallback has a light variant');
+  assert.ok(!css.includes("[data-theme='light'] .cosmic-canvas"), 'canvas is not hidden in light mode');
   for (const route of ['/admin', '/member', '/dashboard', '/login', '/invite']) {
     assert.ok(loader.includes(`'${route}'`), `cosmic background hidden on ${route}`);
   }
@@ -196,6 +200,8 @@ test('cosmic theme: background is client-only, hidden on signed-in routes, respe
   assert.ok(bg.includes('document.hidden'), 'animation pauses when the tab is hidden');
   assert.ok(bg.includes('cosmic-fallback'), 'no-WebGL CSS fallback exists');
   assert.ok(bg.includes('dpr={[0.5, 0.75]}'), 'nebula renders at reduced resolution');
+  assert.ok(bg.includes('uLight'), 'nebula and stars re-tint for light mode');
+  assert.ok(bg.includes("getAttribute('data-theme')"), 'canvas follows the theme toggle live');
 });
 
 test('3D theme: home has scroll prompt and Explore section with real routes', () => {
@@ -229,7 +235,7 @@ test('upload: browser never sends folder separately (2026-10-30 doubled-path ver
 });
 
 test('member cards show the photo when photo_url exists, initials otherwise', () => {
-  for (const f of ['app/team/page.tsx', 'app/page.tsx']) {
+  for (const f of ['app/team/page.tsx', 'app/page.tsx', 'app/admin/page.tsx']) {
     const page = read(f);
     assert.ok(page.includes("m.photo_url?.startsWith('http')"), f + ' checks photo_url');
     assert.ok(page.includes('className="avatar-img"'), f + ' renders the photo in the card');

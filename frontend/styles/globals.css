@@ -169,11 +169,10 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 .admin-member-head { display: flex; align-items: center; gap: 12px; }
 .admin-member-head h3 { margin: 0; }
 
-/* Cosmic layering: fixed canvas (z-0) behind positioned content. The
-   light theme hides the canvas entirely (see loader + rule below). */
+/* Cosmic layering: fixed canvas (z-0) behind positioned content, in
+   both themes — the canvas re-tints itself for light mode. */
 .cosmic-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .cosmic-canvas canvas { display: block; }
-[data-theme='light'] .cosmic-canvas, [data-theme='light'] .cosmic-fallback { display: none; }
 .cosmic-fallback { position: fixed; inset: 0; z-index: 0; pointer-events: none; background:
   radial-gradient(1px 1px at 12% 22%, #fff, transparent),
   radial-gradient(1px 1px at 28% 68%, #fff, transparent),
@@ -188,6 +187,16 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
   radial-gradient(35% 30% at 65% 70%, rgba(255,60,172,0.25), transparent 70%),
   radial-gradient(30% 25% at 30% 80%, rgba(34,211,238,0.22), transparent 70%),
   linear-gradient(180deg, #05060F 0%, #0B0B2B 100%); }
+[data-theme='light'] .cosmic-fallback { background:
+  radial-gradient(1px 1px at 12% 22%, rgba(31,91,255,0.4), transparent),
+  radial-gradient(1px 1px at 28% 68%, rgba(123,47,247,0.35), transparent),
+  radial-gradient(1px 1px at 63% 42%, rgba(31,91,255,0.3), transparent),
+  radial-gradient(1px 1px at 88% 62%, rgba(255,60,172,0.3), transparent),
+  radial-gradient(45% 40% at 20% 15%, rgba(31,91,255,0.16), transparent 70%),
+  radial-gradient(40% 35% at 80% 25%, rgba(123,47,247,0.14), transparent 70%),
+  radial-gradient(35% 30% at 65% 70%, rgba(255,60,172,0.12), transparent 70%),
+  radial-gradient(30% 25% at 30% 80%, rgba(34,211,238,0.12), transparent 70%),
+  linear-gradient(180deg, #EEF1FF 0%, #E8E9FF 100%); }
 main { position: relative; z-index: 1; }
 footer { position: relative; z-index: 1; }
 /* Explorable studio scene on the home page. */

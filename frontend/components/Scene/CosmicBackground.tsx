@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MathUtils, type Group } from 'three';
@@ -9,8 +9,11 @@ import { scrollProgress } from '../../lib/scroll3d';
  * Cosmic background (2026-10-30): a fixed WebGL canvas behind public pages.
  * Animated fbm nebula (blue -> violet -> magenta -> cyan as you scroll),
  * twinkling star layers with mouse parallax, and rare shooting stars.
- * Reduced motion: one frozen frame. Tab hidden: time stops advancing
- * (browsers also throttle rAF). No WebGL: a CSS nebula fallback.
+ * The canvas adapts to the theme: deep-space nebula in dark mode, a
+ * soft pastel nebula in light mode (a dark nebula would hide the light
+ * theme's dark text). Reduced motion: one frozen frame. Tab hidden:
+ * time stops advancing (browsers also throttle rAF). No WebGL: a CSS
+ * nebula fallback.
  * Rendered at 50-75% resolution and upscaled, so it stays at 60fps.
  */
 
@@ -26,6 +29,7 @@ const NEBULA_FRAGMENT = `
 uniform float uTime;
 uniform vec2 uMouse;
 uniform float uScroll;
+uniform float uLight;
 uniform vec2 uResolution;
 varying vec2 vUv;
 
@@ -80,6 +84,9 @@ void main() {
 
   float vig = smoothstep(1.15, 0.35, length(uv - 0.5) * 1.6);
   float alpha = clouds * 0.85 * (0.55 + 0.45 * vig);
+  // Light mode: wash the nebula toward white so dark text stays readable.
+  col = mix(col, mix(col, vec3(1.0), 0.6), uLight);
+  alpha *= mix(1.0, 0.6, uLight);
   gl_FragColor = vec4(col, alpha);
 }
 `;
@@ -104,13 +111,17 @@ void main() {
 
 const STAR_FRAGMENT = `
 uniform float uOpacity;
+uniform float uLight;
 varying vec3 vColor;
 varying float vTwinkle;
 void main() {
   float d = length(gl_PointCoord - 0.5);
-  float alpha = smoothstep(0.5, 0.08, d) * vTwinkle * uOpacity;
+  // Light mode: stars become soft blue dots instead of white ones,
+  // which would be invisible on the light background.
+  vec3 c = mix(vColor, vec3(0.36, 0.47, 0.85), uLight);
+  float alpha = smoothstep(0.5, 0.08, d) * vTwinkle * uOpacity * mix(1.0, 0.5, uLight);
   if (alpha < 0.01) discard;
-  gl_FragColor = vec4(vColor, alpha);
+  gl_FragColor = vec4(c, alpha);
 }
 `;
 
@@ -160,7 +171,7 @@ function buildStarGeometry(def: StarLayerDef, count: number): THREE.BufferGeomet
   return geo;
 }
 
-function ShootingStar() {
+function ShootingStar({ light }: { light: boolean }) {
   const group = useRef<Group>(null);
   const headMat = useRef<THREE.MeshBasicMaterial>(null);
   const trailMat = useRef<THREE.MeshBasicMaterial>(null);
@@ -201,7 +212,7 @@ function ShootingStar() {
     g.position.set(s.x + s.dir * p * 9, s.y - p * 4.5, -2);
     g.rotation.z = Math.atan2(-4.5, s.dir * 9);
     if (headMat.current) headMat.current.opacity = fade;
-    if (trailMat.current) trailMat.current.opacity = fade * 0.4;
+    if (trailMat.current) trailMat.current.opacity = fade * (light ? 0.25 : 0.4);
   });
 
   return (
@@ -210,7 +221,7 @@ function ShootingStar() {
         <planeGeometry args={[0.5, 0.03]} />
         <meshBasicMaterial
           ref={headMat}
-          color="#EAF6FF"
+          color={light ? '#1F5BFF' : '#EAF6FF'}
           transparent
           opacity={0}
           blending={THREE.AdditiveBlending}
@@ -232,7 +243,7 @@ function ShootingStar() {
   );
 }
 
-function CosmicScene({ reduced, mobile }: { reduced: boolean; mobile: boolean }) {
+function CosmicScene({ reduced, mobile, light }: { reduced: boolean; mobile: boolean; light: boolean }) {
   const nebulaMaterial = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -242,6 +253,7 @@ function CosmicScene({ reduced, mobile }: { reduced: boolean; mobile: boolean })
           uTime: { value: 0 },
           uMouse: { value: new THREE.Vector2(0, 0) },
           uScroll: { value: 0 },
+          uLight: { value: 0 },
           uResolution: { value: new THREE.Vector2(1, 1) },
         },
         transparent: true,
@@ -259,6 +271,7 @@ function CosmicScene({ reduced, mobile }: { reduced: boolean; mobile: boolean })
           uTime: { value: 0 },
           uPixelRatio: { value: 1 },
           uOpacity: { value: 1 },
+          uLight: { value: 0 },
         },
         transparent: true,
         depthWrite: false,
@@ -285,6 +298,11 @@ function CosmicScene({ reduced, mobile }: { reduced: boolean; mobile: boolean })
   useEffect(() => {
     starMaterial.uniforms.uPixelRatio.value = dpr;
   }, [dpr, starMaterial]);
+
+  useEffect(() => {
+    nebulaMaterial.uniforms.uLight.value = light ? 1 : 0;
+    starMaterial.uniforms.uLight.value = light ? 1 : 0;
+  }, [light, nebulaMaterial, starMaterial]);
 
   const time = useRef(0);
   const mouse = useRef({ x: 0, y: 0 });
@@ -354,7 +372,7 @@ function CosmicScene({ reduced, mobile }: { reduced: boolean; mobile: boolean })
           <points geometry={geometry} material={starMaterial} frustumCulled={false} />
         </group>
       ))}
-      {!reduced && <ShootingStar />}
+      {!reduced && <ShootingStar light={light} />}
     </>
   );
 }
@@ -369,6 +387,16 @@ function isWebGLAvailable(): boolean {
 }
 
 export default function CosmicBackground() {
+  // Follow the theme toggle live: the canvas re-tints instead of
+  // unmounting when the user switches between dark and light.
+  const [light, setLight] = useState(false);
+  useEffect(() => {
+    const read = () => setLight(document.documentElement.getAttribute('data-theme') === 'light');
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
   const reduced =
     typeof window !== 'undefined' &&
     (window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
@@ -389,7 +417,7 @@ export default function CosmicBackground() {
         onCreated={({ gl }) => gl.setClearColor('#05060F', 0)}
         frameloop={reduced ? 'never' : 'always'}
       >
-        <CosmicScene reduced={reduced} mobile={mobile} />
+        <CosmicScene reduced={reduced} mobile={mobile} light={light} />
       </Canvas>
     </div>
   );

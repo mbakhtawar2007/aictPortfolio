@@ -245,3 +245,11 @@ test('member cards show the photo when photo_url exists, initials otherwise', ()
   assert.ok(css.includes('.avatar-img'), 'avatar-img style exists');
   assert.ok(css.includes('object-fit: cover'), 'card photos crop to a circle');
 });
+
+test('upload verify uses Cloudinary\'s returned public_id, not just the signed one (2026-10-30 resume verify 404)', () => {
+  const up = read('lib/upload.ts');
+  assert.ok(up.includes('j.public_id'), 'direct upload reads the upload response public_id');
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    assert.ok(read(f).includes('j.public_id || d.public_id'), f + ' verifies the stored public_id');
+  }
+});

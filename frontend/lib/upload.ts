@@ -35,7 +35,10 @@ export async function uploadDirectFile(
     throw new Error(sign.error?.message || 'Upload signing is unavailable.');
   }
   const d = sign.data as Record<string, unknown>;
-  const secureUrl = await new Promise<string>((resolve, reject) => {
+  // The upload response's public_id is authoritative: Cloudinary may
+  // store the asset under an adjusted id (raw files get their extension
+  // appended). Verifying the requested id instead 404d every PDF upload.
+  const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
     const form = new FormData();
     form.append('file', file);
     form.append('api_key', String(d.api_key));
@@ -49,22 +52,22 @@ export async function uploadDirectFile(
     xhr.onload = () => {
       try {
         const j = JSON.parse(xhr.responseText) as Record<string, unknown>;
-        if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) resolve(String(j.secure_url));
+        if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) resolve({ secure_url: String(j.secure_url), public_id: String(j.public_id || d.public_id) });
         else reject(new Error((j.error as Record<string, unknown> | undefined)?.message as string | undefined || 'Upload failed.'));
       } catch { reject(new Error('Upload failed.')); }
     };
     xhr.onerror = () => reject(new Error('Upload failed (network).'));
     xhr.send(form);
   });
-  const v = await apiSend('/admin/upload/verify', 'POST', { public_id: String(d.public_id), file_type: fileType }, true);
+  const v = await apiSend('/admin/upload/verify', 'POST', { public_id: uploaded.public_id, file_type: fileType }, true);
   if (v.error || !v.data) {
     throw new Error(v.error?.message || 'Upload was checked by the server and rejected.');
   }
   // Title the asset so it does not show as "Untitled" in media lists.
   // A meta failure never blocks the upload itself.
   if (metaTitle) {
-    const meta = await apiSend('/admin/media/meta', 'POST', { public_id: String(d.public_id), title: metaTitle.slice(0, 120), description: '' }, true);
+    const meta = await apiSend('/admin/media/meta', 'POST', { public_id: uploaded.public_id, title: metaTitle.slice(0, 120), description: '' }, true);
     if (meta.error) console.warn('direct upload meta failed', meta.error.message);
   }
-  return String((v.data as Record<string, unknown>).secure_url || secureUrl);
+  return String((v.data as Record<string, unknown>).secure_url || uploaded.secure_url);
 }

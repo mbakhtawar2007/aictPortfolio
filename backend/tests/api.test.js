@@ -265,3 +265,21 @@ test('upload sign: signed params exclude folder so Cloudinary cannot double the 
     delete process.env.CLOUDINARY_CLOUD_NAME; delete process.env.CLOUDINARY_API_KEY; delete process.env.CLOUDINARY_API_SECRET;
   }
 });
+
+test('upload sign: raw PDF public_id carries the .pdf extension, image public_id carries none (2026-10-30 resume verify 404)', async () => {
+  process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+  process.env.CLOUDINARY_API_KEY = 'test-key';
+  process.env.CLOUDINARY_API_SECRET = 'test-secret';
+  try {
+    const pdf = await call('POST', '/api/admin/upload/sign', ADMIN, { file_type: 'pdf', file_size: 10, file_name: 'resume.pdf' });
+    assert.equal(pdf.status, 200);
+    assert.ok(pdf.json.data.public_id.startsWith('aict-portfolio/resumes/demo-admin-'));
+    assert.ok(pdf.json.data.public_id.endsWith('.pdf'), 'raw public IDs must include the extension');
+    const img = await call('POST', '/api/admin/upload/sign', ADMIN, { file_type: 'image', file_size: 10, file_name: 'x.jpg' });
+    assert.equal(img.status, 200);
+    assert.ok(img.json.data.public_id.startsWith('aict-portfolio/images/demo-admin-'));
+    assert.ok(!img.json.data.public_id.endsWith('.jpg'), 'image public IDs must not include an extension');
+  } finally {
+    delete process.env.CLOUDINARY_CLOUD_NAME; delete process.env.CLOUDINARY_API_KEY; delete process.env.CLOUDINARY_API_SECRET;
+  }
+});

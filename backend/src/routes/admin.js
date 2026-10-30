@@ -177,7 +177,12 @@ adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
     // assets at a doubled path (aict-portfolio/images/aict-portfolio/...)
     // and made verify 404 on every upload (2026-10-30). The signature
     // therefore covers only timestamp + public_id.
-    const public_id = `aict-portfolio/${p.data.file_type === 'video' ? 'videos' : p.data.file_type === 'pdf' ? 'resumes' : 'images'}/${req.actor.uid}-${Date.now()}`;
+    // Cloudinary rule: public IDs of image/video files must NOT include
+    // an extension, but public IDs of raw files MUST include the original
+    // extension. A PDF signed without '.pdf' was stored by Cloudinary
+    // under the extended id, so verify (which looked up the unextended
+    // id) 404d on every resume upload (2026-10-30) while photos worked.
+    const public_id = `aict-portfolio/${p.data.file_type === 'video' ? 'videos' : p.data.file_type === 'pdf' ? 'resumes' : 'images'}/${req.actor.uid}-${Date.now()}${p.data.file_type === 'pdf' ? '.pdf' : ''}`;
     const signature = cloudinary.utils.api_sign_request({ timestamp, public_id }, CLOUDINARY_API_SECRET);
     return ok(res, { cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, timestamp, public_id, signature });
   } catch { return fail(res, 503, 'upload_unavailable', 'File uploads are temporarily unavailable.'); }

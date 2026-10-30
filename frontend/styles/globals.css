@@ -1,14 +1,17 @@
-/* 3D portfolio theme (2026-10-30): light-first, plain CSS (no Tailwind)
-   to keep the static export build reliable. Off-white paper, near-black
-   text, one electric-blue accent. Google Fonts are a runtime @import
-   with system fallbacks — a font fetch failure cannot fail the build.
-   All animations use transform/opacity only. */
+/* Cosmic theme (2026-10-30): deep-space dark default, plain CSS (no
+   Tailwind) to keep the static export build reliable. The WebGL nebula
+   canvas (components/Scene/CosmicBackground) paints behind the content;
+   cards are frosted glass over it. Light theme survives via the toggle.
+   Google Fonts are a runtime @import with system fallbacks — a font
+   fetch failure cannot fail the build. All animations use
+   transform/opacity only. */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-:root { --bg: #0E1116; --surface: rgba(255,255,255,0.05); --surface2: rgba(255,255,255,0.09); --border: rgba(255,255,255,0.12); --text: #F6F7F9; --muted: #9AA6BF; --blue: #6E9BFF; --violet: #1F5BFF; --cyan: #6E9BFF; --link: #8AB4FF; --accent: #1F5BFF; --danger: #f87171; --success: #34d399; }
+:root { --bg: #05060F; --surface: rgba(255,255,255,0.06); --surface2: rgba(255,255,255,0.10); --border: rgba(255,255,255,0.14); --text: #F4F6FF; --muted: #A7ADC9; --blue: #1F5BFF; --violet: #7B2FF7; --magenta: #FF3CAC; --cyan: #22D3EE; --link: #8AB4FF; --accent: #1F5BFF; --danger: #f87171; --success: #34d399; }
 [data-theme='light'] { --bg: #F6F7F9; --surface: #FFFFFF; --surface2: #FFFFFF; --border: rgba(14,17,22,0.12); --text: #0E1116; --muted: #525864; --blue: #1F5BFF; --violet: #1F5BFF; --cyan: #1F5BFF; --link: #1F5BFF; --accent: #1F5BFF; }
 * { box-sizing: border-box; }
 html { scroll-behavior: auto; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; line-height: 1.6; padding-bottom: env(safe-area-inset-bottom); }
+body { margin: 0; background: linear-gradient(180deg, #05060F 0%, #0B0B2B 100%); background-attachment: fixed; color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; line-height: 1.6; padding-bottom: env(safe-area-inset-bottom); }
+[data-theme='light'] body { background: var(--bg); }
 h1, h2, h3 { font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; line-height: 1.2; letter-spacing: -0.01em; }
 h1 { font-weight: 300; }
 h2 { font-weight: 400; }
@@ -27,6 +30,7 @@ a { overflow-wrap: anywhere; }
 .site-header { position: sticky; top: 0; z-index: 20; }
 .progress-bar { height: 3px; background: var(--violet); transition: width 0.1s linear; }
 .nav { display: flex; gap: 16px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--bg); backdrop-filter: blur(14px); }
+html:not([data-theme='light']) .nav { background: rgba(5,6,15,0.7); }
 .nav a { color: var(--text); text-decoration: none; padding: 10px 8px; }
 .nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .nav-links { display: flex; gap: 16px; }
@@ -108,6 +112,7 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 .lightbox img { max-width: 92vw; max-height: 82vh; border-radius: 12px; }
 .lightbox button { position: absolute; }
 .avatar { width: 56px; height: 56px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; background: var(--violet); color: #fff; flex: 0 0 auto; }
+.avatar-img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
 .float-label { position: relative; }
 .float-label label { position: absolute; left: 12px; top: 16px; transition: transform 0.15s ease, opacity 0.15s ease; pointer-events: none; }
 .float-label input:focus + label, .float-label input:not(:placeholder-shown) + label, .float-label textarea:focus + label, .float-label textarea:not(:placeholder-shown) + label { transform: translateY(-14px) scale(0.85); opacity: 0.9; }
@@ -164,17 +169,33 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 .admin-member-head { display: flex; align-items: center; gap: 12px; }
 .admin-member-head h3 { margin: 0; }
 
-/* 3D theme layering: fixed canvas (z-0) behind positioned content. */
-.ambient-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
-.ambient-canvas canvas { display: block; }
-.ambient-fallback { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+/* Cosmic layering: fixed canvas (z-0) behind positioned content. The
+   light theme hides the canvas entirely (see loader + rule below). */
+.cosmic-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.cosmic-canvas canvas { display: block; }
+[data-theme='light'] .cosmic-canvas, [data-theme='light'] .cosmic-fallback { display: none; }
+.cosmic-fallback { position: fixed; inset: 0; z-index: 0; pointer-events: none; background:
+  radial-gradient(1px 1px at 12% 22%, #fff, transparent),
+  radial-gradient(1px 1px at 28% 68%, #fff, transparent),
+  radial-gradient(1px 1px at 44% 18%, #BFD6FF, transparent),
+  radial-gradient(1px 1px at 63% 42%, #fff, transparent),
+  radial-gradient(1px 1px at 78% 14%, #FFE9B8, transparent),
+  radial-gradient(1px 1px at 88% 62%, #fff, transparent),
+  radial-gradient(1px 1px at 55% 82%, #BFD6FF, transparent),
+  radial-gradient(1px 1px at 8% 48%, #fff, transparent),
+  radial-gradient(45% 40% at 20% 15%, rgba(31,91,255,0.35), transparent 70%),
+  radial-gradient(40% 35% at 80% 25%, rgba(123,47,247,0.30), transparent 70%),
+  radial-gradient(35% 30% at 65% 70%, rgba(255,60,172,0.25), transparent 70%),
+  radial-gradient(30% 25% at 30% 80%, rgba(34,211,238,0.22), transparent 70%),
+  linear-gradient(180deg, #05060F 0%, #0B0B2B 100%); }
 main { position: relative; z-index: 1; }
 footer { position: relative; z-index: 1; }
 /* Explorable studio scene on the home page. */
 .explore-canvas-wrap { position: relative; height: 480px; overflow: hidden; border-radius: 24px; border: 1px solid var(--border); background: var(--surface); }
 @media (min-width: 768px) { .explore-canvas-wrap { height: 560px; } }
 .explore-canvas-wrap canvas { display: block; }
-.explore-hint { position: absolute; left: 16px; top: 16px; margin: 0; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,0.85); color: #525864; font-size: 12px; pointer-events: none; }
+.explore-hint { position: absolute; left: 16px; top: 16px; margin: 0; padding: 6px 12px; border-radius: 999px; background: rgba(5,6,15,0.72); color: #F4F6FF; border: 1px solid var(--border); font-size: 12px; pointer-events: none; }
+[data-theme='light'] .explore-hint { background: rgba(255,255,255,0.85); color: #525864; }
 .explore-reset { position: absolute; right: 16px; bottom: 16px; }
 .explore-panel { margin-top: 16px; }
 .hero-scroll-prompt { margin-top: 28px; }

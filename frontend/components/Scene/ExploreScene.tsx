@@ -32,7 +32,7 @@ const OBJECTS: ExploreObject[] = [
     hrefLabel: 'See the team',
     geometry: 'icosahedron',
     position: [-2.6, 0.3, 0],
-    color: '#0E1116',
+    color: '#7B2FF7',
   },
   {
     key: 'projects',
@@ -42,7 +42,7 @@ const OBJECTS: ExploreObject[] = [
     hrefLabel: 'See projects',
     geometry: 'torus',
     position: [2.6, 0.3, 0],
-    color: '#C7CDD8',
+    color: '#22D3EE',
   },
   {
     key: 'achievements',
@@ -52,7 +52,7 @@ const OBJECTS: ExploreObject[] = [
     hrefLabel: 'See achievements',
     geometry: 'sphere',
     position: [0, 0.3, -2.2],
-    color: '#EDEFF3',
+    color: '#FF3CAC',
   },
   {
     key: 'gallery',
@@ -117,12 +117,14 @@ function StudioMesh({ obj, selected, onSelect }: {
       }}
     >
       {geometry}
-      <meshStandardMaterial
+      <meshPhysicalMaterial
         color={obj.color}
-        roughness={obj.color === '#1F5BFF' ? 0.3 : 0.85}
-        metalness={0}
-        emissive={selected ? '#1F5BFF' : '#000000'}
-        emissiveIntensity={selected ? 0.25 : 0}
+        roughness={0.15}
+        metalness={0.1}
+        clearcoat={1}
+        clearcoatRoughness={0.25}
+        emissive={obj.color}
+        emissiveIntensity={selected ? 0.55 : 0.3}
       />
     </mesh>
   );
@@ -150,13 +152,15 @@ export default function ExploreScene() {
         <Canvas
           dpr={[1, 2]}
           camera={{ position: [0, 1.4, 7.5], fov: 42 }}
-          gl={{ antialias: true, powerPreference: 'high-performance' }}
-          onCreated={({ gl }) => gl.setClearColor('#F6F7F9', 1)}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          onCreated={({ gl }) => gl.setClearColor('#000000', 0)}
           onPointerMissed={() => setSelectedKey(null)}
         >
           <ambientLight intensity={0.9} />
-          <hemisphereLight args={['#ffffff', '#dfe3ea', 0.5]} />
+          <hemisphereLight args={['#8AB4FF', '#0B0B2B', 0.6]} />
           <directionalLight position={[5, 8, 5]} intensity={1.3} />
+          <pointLight position={[-6, 3, 3]} intensity={20} distance={25} color="#FF3CAC" />
+          <pointLight position={[6, 3, 3]} intensity={20} distance={25} color="#22D3EE" />
           {OBJECTS.map((obj) => (
             <StudioMesh
               key={obj.key}

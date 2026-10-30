@@ -85,13 +85,13 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     {errors.slug && <p className="error">{errors.slug}</p>}
     <p><button className="btn" disabled={busy}>{busy ? <><span className="spinner" /> Saving…</> : selfCreate ? 'Create my profile' : 'Create member'}</button>{' '}<button type="button" className="btn secondary" onClick={onCancel}>Cancel</button></p>
     <p><button type="button" className="btn secondary small" onClick={() => setShowAll(true)}>Add all details now instead</button></p>
-    <p className="muted">The web address is made automatically from the name (e.g. /team/ayesha-khan). The member is saved as a draft until an admin publishes it.</p>
+    <p className="muted">The web address is made automatically from the name (e.g. /team/member-name). The member is saved as a draft until an admin publishes it.</p>
   </form>);
   return (<form onSubmit={submit}>
     {selfCreate && <p className="muted">You are creating your own profile. It will be saved as a draft, and an admin will review and publish it. You do not need to fill everything — name and web address are enough to start.</p>}
     <section className="form-section"><h3>Basics</h3><p className="muted">Only name and web address are required. Everything else can be added later.</p>
     <Text label="Full name *" value={errText(f.full_name)} onChange={(v) => { set('full_name', v); if (!errText(f.slug)) set('slug', slugify(v)); }} error={errors.full_name} />
-    <Text label="Web address (slug) *" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} placeholder="e.g. ayesha-khan — this becomes /team/ayesha-khan" />
+    <Text label="Web address (slug) *" value={errText(f.slug)} onChange={(v) => set('slug', v)} error={errors.slug} placeholder="e.g. member-name — this becomes /team/member-name" />
     <p className="muted">Changing this breaks previously shared links to this profile.</p>
     <Text label="Role title" value={errText(f.role_title)} onChange={(v) => set('role_title', v)} placeholder="e.g. AI Developer" />
     <Text label="Short intro" value={errText(f.short_intro)} onChange={(v) => set('short_intro', v)} />

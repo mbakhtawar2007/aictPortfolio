@@ -10,6 +10,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../src/app.js';
+import { checkVerifyAsset } from '../src/verifyAsset.js';
 
 let server; let base;
 before(async () => {
@@ -282,4 +283,22 @@ test('upload sign: raw PDF public_id carries the .pdf extension, image public_id
   } finally {
     delete process.env.CLOUDINARY_CLOUD_NAME; delete process.env.CLOUDINARY_API_KEY; delete process.env.CLOUDINARY_API_SECRET;
   }
+});
+
+test('upload verify: raw PDF with no reported format passes when id/URL ends .pdf (2026-10-30 resume 400)', () => {
+  const pdfId = 'aict-portfolio/resumes/demo-admin-123.pdf';
+  // The normal case still passes.
+  assert.equal(checkVerifyAsset('pdf', { format: 'pdf', bytes: 1000, resource_type: 'raw', secure_url: 'https://x/' + pdfId }, pdfId).ok, true);
+  // The live failure: asset found, size fine, but no usable format reported.
+  assert.equal(checkVerifyAsset('pdf', { format: '', bytes: 1000, resource_type: 'raw', secure_url: 'https://x/' + pdfId }, pdfId).ok, true);
+  assert.equal(checkVerifyAsset('pdf', { format: '', bytes: 1000, resource_type: 'raw', secure_url: 'https://x/aict-portfolio/resumes/demo-admin-123.pdf' }, 'aict-portfolio/resumes/demo-admin-123').ok, true);
+  // A present non-PDF format is still rejected, even with a .pdf id.
+  assert.equal(checkVerifyAsset('pdf', { format: 'docx', bytes: 1000, resource_type: 'raw', secure_url: 'https://x/' + pdfId }, pdfId).ok, false);
+  // A missing format on a non-raw asset is still rejected.
+  assert.equal(checkVerifyAsset('pdf', { format: '', bytes: 1000, resource_type: 'image', secure_url: 'https://x/' + pdfId }, pdfId).ok, false);
+  // Size still enforced for PDFs, and other types are unchanged.
+  assert.equal(checkVerifyAsset('pdf', { format: 'pdf', bytes: 6 * 1024 * 1024, resource_type: 'raw', secure_url: 'https://x/' + pdfId }, pdfId).ok, false);
+  assert.equal(checkVerifyAsset('image', { format: 'jpg', bytes: 1000, resource_type: 'image' }, 'aict-portfolio/images/x').ok, true);
+  assert.equal(checkVerifyAsset('image', { format: 'pdf', bytes: 1000, resource_type: 'image' }, 'aict-portfolio/images/x').ok, false);
+  assert.equal(checkVerifyAsset('video', { format: 'mp4', bytes: 1000, resource_type: 'video' }, 'aict-portfolio/videos/x').ok, true);
 });

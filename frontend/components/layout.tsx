@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
-import { sampleSite } from '../lib/sample';
 import type { SiteSettings } from '../lib/types';
 
 function readTheme(): string { if (typeof window === 'undefined') return 'light'; return window.localStorage.getItem('aict_theme') || 'dark'; }
@@ -21,7 +20,7 @@ export function ReduceToggle() {
 }
 export function Navbar() {
   const [site, setSite] = useState<SiteSettings | null>(null);
-  useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error) setSite(r.data || sampleSite); }); }, []);
+  useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error) setSite(r.data || null); }); }, []);
   const [open, setOpen] = useState(false);
   const burgerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);

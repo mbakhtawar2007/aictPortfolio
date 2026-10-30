@@ -4,6 +4,7 @@ import { store, isFirebase } from '../store.js';
 import { authAdmin, firebaseEnabled, demoMode } from '../firebase.js';
 import { requireAdmin, requireMemberOrAdmin, canEditMember, canEditProject } from '../auth.js';
 import { audit } from '../audit.js';
+import { checkVerifyAsset } from '../verifyAsset.js';
 import crypto from 'crypto';
 export const adminRouter = express.Router();
 // NOTE: this router is mounted at /api/admin, so paths below are relative.
@@ -208,12 +209,18 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
     let asset;
     try { asset = await cloudinary.api.resource(publicId, { resource_type: resourceType }); }
     catch { return fail(res, 404, 'not_found', 'No such uploaded asset was found.'); }
-    const allowedFormats = expected === 'video' ? ['mp4', 'webm'] : expected === 'pdf' ? ['pdf'] : ['jpg', 'jpeg', 'png', 'webp', 'avif'];
-    const maxVerifyBytes = expected === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
-    const okAsset = asset.bytes <= maxVerifyBytes && allowedFormats.includes((asset.format || '').toLowerCase());
-    if (!okAsset) {
+    // Format rule lives in verifyAsset.js (unit-tested): for PDFs a missing
+    // format no longer blocks a raw asset whose id/URL ends in .pdf — that
+    // was the 2026-10-30 admin resume failure. The rejection message now
+    // reports what Cloudinary actually returned, so a future failure is
+    // diagnosable instead of another blind guess.
+    const check = checkVerifyAsset(expected, asset, publicId);
+    if (!check.ok) {
       try { await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }); } catch { /* removal best effort */ }
-      return fail(res, 400, 'validation_error', `Upload rejected: ${asset.bytes > maxVerifyBytes ? `file is larger than ${expected === 'video' ? '50 MB' : '5 MB'}` : 'file format is not allowed'} (asset removed).`);
+      const why = check.reason === 'size'
+        ? `file is larger than ${expected === 'video' ? '50 MB' : '5 MB'}`
+        : `file format is not allowed (Cloudinary reported format '${check.format || 'none'}', type '${check.resourceType || 'unknown'}')`;
+      return fail(res, 400, 'validation_error', `Upload rejected: ${why} (asset removed).`);
     }
     return ok(res, { verified: true, secure_url: asset.secure_url, format: asset.format, bytes: asset.bytes, resource_type: asset.resource_type });
   } catch { return fail(res, 503, 'upload_unavailable', 'Upload verification is temporarily unavailable.'); }

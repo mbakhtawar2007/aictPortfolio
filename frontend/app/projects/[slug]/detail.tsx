@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import type { Project, Member } from '../../../lib/types';
-import { ErrorBox, SampleBadge } from '../../shared';
-import { sampleMembers, sampleProjects, orDemo } from '../../../lib/sample';
+import { ErrorBox } from '../../shared';
 import { SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function ProjectDetail({ slug }: { slug: string }) {
   const [p, setP] = useState<Project | null>(null); const [members, setMembers] = useState<Member[]>([]);
@@ -20,9 +19,9 @@ export default function ProjectDetail({ slug }: { slug: string }) {
         ? decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || slug)
         : slug;
       const [r, m, a] = await Promise.all([apiGet<Project>(`/projects/${actualSlug}`), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects')]);
-      const project = (!r.error && r.data) ? r.data : sampleProjects.find((x) => x.slug === actualSlug) || null;
+      const project = (!r.error && r.data) ? r.data : null;
       if (!project) setError(r.error ? r.error.message : 'Project not found.'); else setP(project);
-      setMembers(orDemo(m.data, sampleMembers)); setAll(orDemo(a.data, sampleProjects));
+      setMembers(m.data || []); setAll(a.data || []);
       setLoading(false);
     })();
   }, [slug]);
@@ -38,7 +37,7 @@ export default function ProjectDetail({ slug }: { slug: string }) {
   const related = all.filter((x) => x.id !== p.id && x.category === p.category).slice(0, 3);
   return (<div>
     {p.cover_url ? <img className="blur-up" src={p.cover_url} alt={`${p.title} cover`} tabIndex={0} role="button" aria-label={`Open ${p.title} cover`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLb(0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLb(0); } }} /> : null}
-    <h1>{p.title} <SampleBadge isSample={p.isSample} /></h1>
+    <h1>{p.title}</h1>
     <p className="muted">{p.category} {p.year ? `· ${p.year}` : ''} {p.featured ? '· Featured' : ''}</p>
     <p>{p.tagline}</p><p>{p.description}</p>
     {p.case_study && <><h2>Case study</h2><p>{p.case_study}</p></>}

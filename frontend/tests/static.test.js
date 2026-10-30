@@ -77,34 +77,36 @@ test('invite page is token-gated, not a public signup', () => {
   assert.ok(/token/.test(invite));
 });
 
-test('public demo fallback exists, is realistic (no placeholder wording), and home shows all members in a grid', () => {
-  const sample = read('lib/sample.ts');
-  assert.match(sample, /sampleMembers|sampleProjects/);
-  assert.ok(!/SAMPLE/.test(sample), 'demo fallback must not carry placeholder wording');
-  assert.ok(sampleMembersCount(sample) >= 3);
+test('no dummy/demo data anywhere on public pages (2026-10-30): empty lists stay empty', () => {
+  assert.ok(!fs.existsSync(path.join(root, 'lib/sample.ts')), 'demo data file is gone');
+  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'app/skills/page.tsx', 'app/team/[slug]/detail.tsx', 'app/projects/[slug]/detail.tsx', 'components/layout.tsx']) {
+    assert.ok(!/lib\/sample|orDemo|sampleMembers|sampleProjects|sampleAchievements|sampleSite|SampleBadge/.test(read(f)), f + ' must not use demo data');
+  }
   const home = read('app/page.tsx');
   assert.ok(!/team-strip/.test(home), 'home must not hide members in a sideways strip');
   assert.ok(!/hero-scene/.test(home), '3D hero scene removed for the minimal look');
-  assert.ok(/lib\/sample/.test(home));
+  assert.ok(/No published team members yet/.test(home), 'home shows an empty state, not demo members');
+  assert.ok(/No featured projects yet/.test(home), 'home shows an empty state, not demo projects');
 });
-function sampleMembersCount(src) { return (src.match(/slug: '/g) || []).length; }
-test('detail pages fall back to demo records for demo slugs', () => {
-  assert.match(read('app/team/[slug]/detail.tsx'), /sampleMembers\.find/);
-  assert.match(read('app/projects/[slug]/detail.tsx'), /sampleProjects\.find/);
+test('detail pages show not-found for unknown slugs, no demo fallback', () => {
+  assert.ok(!/sampleMembers\.find|sampleProjects\.find/.test(read('app/team/[slug]/detail.tsx')));
+  assert.ok(!/sampleMembers\.find|sampleProjects\.find/.test(read('app/projects/[slug]/detail.tsx')));
+  assert.match(read('app/team/[slug]/detail.tsx'), /Member not found/);
+  assert.match(read('app/projects/[slug]/detail.tsx'), /Project not found/);
 });
 
-test('cleanup: no dead team-strip CSS, shared demo fallback used (login buttons are intentional since 2026-10-30)', () => {
+test('cleanup: no dead team-strip CSS, no demo fallback (login buttons are intentional since 2026-10-30)', () => {
   assert.ok(!/team-strip/.test(read('styles/globals.css')), 'dead team-strip CSS removed');
-  assert.match(read('lib/sample.ts'), /export function orDemo/);
+  assert.ok(!/\.sample\b/.test(read('styles/globals.css')), 'demo badge CSS removed');
   for (const f of ['app/team/page.tsx', 'app/projects/page.tsx', 'app/skills/page.tsx']) {
-    assert.match(read(f), /orDemo\(/);
+    assert.ok(!/orDemo\(/.test(read(f)), f + ' must not use the demo fallback');
   }
 });
 test('cleanup: no unused Loading/SampleBadge imports in public list pages', () => {
-  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx']) {
+  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'app/skills/page.tsx']) {
     assert.ok(!/\bLoading\b/.test(read(f).replace(/loading/g, '')), f + ' must not import unused Loading');
+    assert.ok(!/SampleBadge/.test(read(f)), f + ' must not use the demo badge');
   }
-  assert.ok(!/SampleBadge/.test(read('app/skills/page.tsx')));
 });
 
 test('gallery and achievements pages removed (2026-10-30): no routes, no nav/footer/explore links', () => {

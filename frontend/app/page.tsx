@@ -2,8 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
 import type { Member, Project, Achievement, SiteSettings } from '../lib/types';
-import { Empty, ErrorBox, SampleBadge, Section } from './shared';
-import { sampleMembers, sampleProjects, sampleAchievements, sampleSite, orDemo } from '../lib/sample';
+import { Empty, ErrorBox, Section } from './shared';
 import { SkeletonGrid } from '../components/ui';
 import ExploreStudio from '../components/ExploreStudio';
 import { scrollToSection } from '../lib/scroll3d';
@@ -28,10 +27,10 @@ export default function Home() {
   const load = async () => {
     setLoading(true); setSiteError(''); setMembersError(''); setProjectsError(''); setAchievementsError('');
     const [s, m, p, a] = await Promise.all([apiGet<SiteSettings>('/site'), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects'), apiGet<Achievement[]>('/achievements')]);
-    if (s.error) setSiteError(s.error.message); else setSite(s.data || sampleSite);
-    if (m.error) setMembersError(m.error.message); else setMembers(orDemo(m.data, sampleMembers));
-    if (p.error) setProjectsError(p.error.message); else setProjects(orDemo(p.data, sampleProjects));
-    if (a.error) setAchievementsError(a.error.message); else setAchievements(orDemo(a.data, sampleAchievements));
+    if (s.error) setSiteError(s.error.message); else setSite(s.data || null);
+    if (m.error) setMembersError(m.error.message); else setMembers(m.data || []);
+    if (p.error) setProjectsError(p.error.message); else setProjects(p.data || []);
+    if (a.error) setAchievementsError(a.error.message); else setAchievements(a.data || []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -40,7 +39,7 @@ export default function Home() {
   const videoCount = projects.filter((p) => p.category === 'AI Video').length;
   return (<div>
     <div className="hero reveal">
-      <h1>{site?.group_name || 'AICT Group'} <SampleBadge isSample={site?.isSample} /></h1>
+      <h1>{site?.group_name || 'AICT Group'}</h1>
       <p className="hero-fullform">Application of Information and Communication Technologies</p>
       <h2>We create <span className="hero-words" aria-label="AI videos, AI tools, websites, stories"><span>AI videos</span><span>AI tools</span><span>websites</span><span>stories</span></span></h2>
       <p>{site?.tagline || 'Who we are, what we build, and what we have achieved.'}</p>
@@ -54,10 +53,10 @@ export default function Home() {
       {[['AI Video Creation', 'Short AI videos, showreels and visual stories made by the team.'], ['AI Projects', 'Practical AI tools and experiments, built and documented by members.'], ['Web Development', 'Websites and web apps, from design to a live, working product.'], ['Creative Storytelling', 'Ideas turned into stories told through video, visuals and words.']].map(([t, d]) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">{d}</p></div>))}
     </div></Section>
     <Section title="Meet the Team">{membersError ? (<div><ErrorBox message={membersError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="grid">
-      {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}>{m.photo_url?.startsWith('http') ? <img className="avatar-img" src={m.photo_url} alt="" /> : <span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}<h3><a href={`/team/${m.slug}`}>{m.full_name}</a> <SampleBadge isSample={m.isSample} /></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
+      {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}>{m.photo_url?.startsWith('http') ? <img className="avatar-img" src={m.photo_url} alt="" /> : <span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}<h3><a href={`/team/${m.slug}`}>{m.full_name}</a></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
     </div><p><a href="/team">See the full team →</a></p></>)}</Section>
     <Section title="Featured Projects">{projectsError ? (<div><ErrorBox message={projectsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
-      {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a> <SampleBadge isSample={p.isSample} /></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
+      {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
     </div>)}</Section>
     <ExploreStudio />
     <Section title="Stats"><div className="grid">
@@ -67,7 +66,7 @@ export default function Home() {
       <div className="card">{projectsError ? <span className="stat">—</span> : <Counter value={videoCount} />}<p className="muted">AI videos{projectsError ? ' (unavailable)' : ''}</p></div>
     </div></Section>
     <Section title="Achievements highlights">{achievementsError ? (<div><ErrorBox message={achievementsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The achievement list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
-      {achievements.filter((a) => a.featured).map((a) => (<div className="card card-hover" key={a.id}><h3>{a.title} <SampleBadge isSample={a.isSample} /></h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p></div>))}
+      {achievements.filter((a) => a.featured).map((a) => (<div className="card card-hover" key={a.id}><h3>{a.title}</h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p></div>))}
       {!achievements.filter((a) => a.featured).length && <Empty text="No featured achievements yet." />}
     </div>)}</Section>
     <Section title="Contact"><p><a className="btn" href="/contact">Send a message</a> <a className="btn secondary" href="/team">Meet the team first</a></p></Section>

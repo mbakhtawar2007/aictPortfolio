@@ -43,13 +43,15 @@ export function Navbar() {
     <nav className="nav" aria-label="Main navigation">
       {site?.logo_url ? <a href="/"><img src={site.logo_url} alt={site.group_name || 'AICT Group'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'AICT'}</a>}
       <span className="nav-links">{links.map(([href, label]) => (<a key={href} href={href}>{label}</a>))}</span>
-      <span className="nav-actions"><ThemeToggle />
+      <span className="nav-actions"><a className="btn secondary small nav-login" href="/admin/login">Admin login</a><a className="btn secondary small nav-login" href="/login">Member login</a><ThemeToggle />
         <button ref={burgerRef} className="icon-btn nav-burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen(true)}>☰</button></span>
     </nav>
     {open && (<div className="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu">
       <button ref={closeRef} className="icon-btn mobile-close" aria-label="Close menu" onClick={() => { setOpen(false); burgerRef.current?.focus(); }}>×</button>
       {links.map(([href, label]) => (<a key={href} href={href} onClick={() => setOpen(false)}>{label}</a>))}
       <a className="btn" href="/contact" onClick={() => setOpen(false)}>Contact</a>
+      <a className="btn secondary" href="/admin/login" onClick={() => setOpen(false)}>Admin login</a>
+      <a className="btn secondary" href="/login" onClick={() => setOpen(false)}>Member login</a>
     </div>)}
   </header>);
 }

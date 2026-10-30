@@ -93,9 +93,7 @@ test('detail pages fall back to demo records for demo slugs', () => {
   assert.match(read('app/projects/[slug]/detail.tsx'), /sampleProjects\.find/);
 });
 
-test('cleanup: no Admin link in public layout, no dead team-strip CSS, shared demo fallback used', () => {
-  const layout = read('components/layout.tsx');
-  assert.ok(!/\/admin\/login/.test(layout), 'public header must not link to admin login');
+test('cleanup: no dead team-strip CSS, shared demo fallback used (login buttons are intentional since 2026-10-30)', () => {
   assert.ok(!/team-strip/.test(read('styles/globals.css')), 'dead team-strip CSS removed');
   assert.match(read('lib/sample.ts'), /export function orDemo/);
   for (const f of ['app/team/page.tsx', 'app/projects/page.tsx', 'app/achievements/page.tsx', 'app/skills/page.tsx']) {
@@ -139,4 +137,12 @@ test('invite link delivery states: gmail success, gmail failure, and manual fall
   assert.ok(admin.includes("email_delivery === 'gmail'"));
   assert.ok(admin.includes("email_delivery === 'failed'"));
   assert.ok(admin.includes('via Gmail'));
+});
+
+test('navbar has Admin login and Member login buttons (desktop + mobile menu)', () => {
+  const layout = read('components/layout.tsx');
+  assert.ok(layout.includes('href="/admin/login">Admin login</a>'));
+  assert.ok(layout.includes('href="/login">Member login</a>'));
+  assert.ok(read('app/admin/login/page.tsx').includes('heading="Admin login"'));
+  assert.ok(read('styles/globals.css').includes('.nav-login { display: none; }'));
 });

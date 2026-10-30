@@ -10,8 +10,6 @@ const ExploreScene = dynamic(() => import('./Scene/ExploreScene'), { ssr: false,
 const FALLBACK = [
   { title: 'Team', description: 'The people behind the group — profiles, skills, and stories.', href: '/team' },
   { title: 'Projects', description: 'What the group builds — AI videos, tools, websites, and experiments.', href: '/projects' },
-  { title: 'Achievements', description: 'Certificates and milestones the group has earned along the way.', href: '/achievements' },
-  { title: 'Gallery', description: 'Photos and videos from the group — moments, work, and events.', href: '/gallery' },
 ];
 
 function isWebGLAvailable(): boolean {

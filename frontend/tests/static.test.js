@@ -54,7 +54,7 @@ test('modal/dialog accessibility: Escape, focus trap or return', () => {
   assert.match(ui, /role=["']dialog["']|aria-modal/);
 });
 test('tabs carry tablist/tab/tabpanel semantics', () => {
-  const files = ['app/projects/page.tsx', 'app/achievements/page.tsx', 'app/skills/page.tsx', 'app/admin/page.tsx'];
+  const files = ['app/projects/page.tsx', 'app/skills/page.tsx', 'app/admin/page.tsx'];
   assert.ok(any(files, /role=["']tablist["']/));
   assert.ok(any(files, /aria-controls/));
   assert.ok(any(files, /onKeyDown|ArrowRight|ArrowLeft/));
@@ -96,21 +96,25 @@ test('detail pages fall back to demo records for demo slugs', () => {
 test('cleanup: no dead team-strip CSS, shared demo fallback used (login buttons are intentional since 2026-10-30)', () => {
   assert.ok(!/team-strip/.test(read('styles/globals.css')), 'dead team-strip CSS removed');
   assert.match(read('lib/sample.ts'), /export function orDemo/);
-  for (const f of ['app/team/page.tsx', 'app/projects/page.tsx', 'app/achievements/page.tsx', 'app/skills/page.tsx']) {
+  for (const f of ['app/team/page.tsx', 'app/projects/page.tsx', 'app/skills/page.tsx']) {
     assert.match(read(f), /orDemo\(/);
   }
 });
 test('cleanup: no unused Loading/SampleBadge imports in public list pages', () => {
-  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'app/achievements/page.tsx']) {
+  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx']) {
     assert.ok(!/\bLoading\b/.test(read(f).replace(/loading/g, '')), f + ' must not import unused Loading');
   }
   assert.ok(!/SampleBadge/.test(read('app/skills/page.tsx')));
 });
 
-test('gallery: public page exists, nav links it, media details and delete are wired', () => {
-  assert.ok(fs.existsSync(path.join(root, 'app/gallery/page.tsx')));
-  assert.match(read('app/gallery/page.tsx'), /apiGet<MediaItem\[\]>\('\/gallery'\)/);
-  assert.match(read('components/layout.tsx'), /\/gallery/);
+test('gallery and achievements pages removed (2026-10-30): no routes, no nav/footer/explore links', () => {
+  assert.ok(!fs.existsSync(path.join(root, 'app/gallery/page.tsx')), 'gallery page is gone');
+  assert.ok(!fs.existsSync(path.join(root, 'app/achievements/page.tsx')), 'achievements page is gone');
+  assert.ok(!/\/gallery/.test(read('components/layout.tsx')), 'nav/footer must not link to /gallery');
+  assert.ok(!/\/achievements/.test(read('components/layout.tsx')), 'nav/footer must not link to /achievements');
+  assert.ok(!/\/gallery|\/achievements/.test(read('components/ExploreStudio.tsx')), 'explore fallback must not link to removed pages');
+  assert.ok(!/\/gallery|\/achievements/.test(read('components/Scene/ExploreScene.tsx')), 'explore scene must not link to removed pages');
+  // Uploads themselves stay: media details and delete are still wired.
   assert.match(read('app/admin/page.tsx'), /media\/meta/);
   assert.match(read('app/admin/page.tsx'), /kind === 'media'/);
   assert.match(read('app/member/page.tsx'), /media\/meta/);
@@ -214,8 +218,11 @@ test('3D theme: home has scroll prompt and Explore section with real routes', ()
   assert.ok(scene.includes('alpha: true'), 'studio canvas is transparent so the nebula shows through');
   assert.ok(scene.includes('#7B2FF7') && scene.includes('#FF3CAC') && scene.includes('#22D3EE'), 'studio objects use the cosmic palette');
   assert.ok(scene.includes('Reset view'), 'reset view button');
-  for (const route of ['/team', '/projects', '/achievements', '/gallery']) {
+  for (const route of ['/team', '/projects']) {
     assert.ok(scene.includes(`href: '${route}'`), `explore object links to ${route}`);
+  }
+  for (const route of ['/achievements', '/gallery']) {
+    assert.ok(!scene.includes(`href: '${route}'`), `explore object must not link to removed ${route}`);
   }
   const explore = read('components/ExploreStudio.tsx');
   assert.ok(explore.includes("dynamic(() => import('./Scene/ExploreScene'), { ssr: false"), 'studio scene lazy + client-only');
@@ -252,4 +259,19 @@ test('upload verify uses Cloudinary\'s returned public_id, not just the signed o
   for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
     assert.ok(read(f).includes('j.public_id || d.public_id'), f + ' verifies the stored public_id');
   }
+});
+
+test('video upload creates a project card shown in Projects (2026-10-30)', () => {
+  const helper = read('lib/videoProject.ts');
+  assert.match(helper, /export async function createVideoProject/);
+  assert.match(helper, /\/admin\/projects/);
+  assert.match(helper, /category: 'AI Video'/);
+  assert.match(helper, /video_url/);
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const page = read(f);
+    assert.match(page, /createVideoProject/, f + ' calls the video-to-project helper');
+    assert.match(page, /uploadType === 'video'/, f + ' only creates a card for videos');
+  }
+  const projects = read('app/projects/page.tsx');
+  assert.match(projects, /p\.video_url \? <video/, 'project cards preview the video');
 });

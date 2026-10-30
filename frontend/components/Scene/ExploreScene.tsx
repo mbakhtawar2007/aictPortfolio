@@ -44,26 +44,7 @@ const OBJECTS: ExploreObject[] = [
     position: [2.6, 0.3, 0],
     color: '#22D3EE',
   },
-  {
-    key: 'achievements',
-    title: 'Achievements',
-    description: 'Certificates and milestones the group has earned along the way.',
-    href: '/achievements',
-    hrefLabel: 'See achievements',
-    geometry: 'sphere',
-    position: [0, 0.3, -2.2],
-    color: '#FF3CAC',
-  },
-  {
-    key: 'gallery',
-    title: 'Gallery',
-    description: 'Photos and videos from the group — moments, work, and events.',
-    href: '/gallery',
-    hrefLabel: 'Open the gallery',
-    geometry: 'capsule',
-    position: [0, 0.3, 2.2],
-    color: '#1F5BFF',
-  },
+
 ];
 
 function StudioMesh({ obj, selected, onSelect }: {

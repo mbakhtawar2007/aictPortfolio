@@ -160,3 +160,45 @@ test('profile form has direct photo and resume upload from the device', () => {
   assert.ok(up.includes('/admin/upload/sign'));
   assert.ok(up.includes('/admin/upload/verify'));
 });
+
+test('3D theme: light-first palette, Inter only, accent electric blue', () => {
+  const css = read('styles/globals.css');
+  assert.ok(css.includes("--bg: #F6F7F9"), 'light theme is the off-white 3D paper');
+  assert.ok(css.includes('--accent: #1F5BFF'), 'electric blue accent token exists');
+  assert.ok(css.includes('family=Inter:wght@300;400;500;600;700'), 'one sans (Inter) only');
+  assert.ok(!css.includes('Space Grotesk'), 'Space Grotesk removed with the old theme');
+  assert.ok(css.includes('.ambient-canvas'), 'ambient canvas layer exists');
+  assert.ok(css.includes('.card-hover:hover { transform: translateY(-6px)'), 'cards lift on hover');
+  const layout = read('app/layout.tsx');
+  assert.ok(layout.includes("||'light'"), 'first-load default theme is light');
+  assert.ok(layout.includes('AmbientCanvasLoader'), 'ambient canvas mounted in root layout');
+  assert.ok(layout.includes('SmoothScroll'), 'Lenis smooth scroll mounted in root layout');
+  assert.ok(read('components/layout.tsx').includes("|| 'light'"), 'theme toggle default is light');
+});
+
+test('3D theme: ambient canvas is client-only and hidden on signed-in routes', () => {
+  const loader = read('components/Scene/AmbientCanvasLoader.tsx');
+  assert.ok(loader.includes("dynamic(() => import('./AmbientCanvas'), { ssr: false"), 'no SSR for three.js');
+  for (const route of ['/admin', '/member', '/dashboard', '/login', '/invite']) {
+    assert.ok(loader.includes(`'${route}'`), `canvas hidden on ${route}`);
+  }
+  const canvas = read('components/Scene/AmbientCanvas.tsx');
+  assert.ok(canvas.includes('Float'), 'floating ambient shapes');
+  assert.ok(canvas.includes('scrollProgress'), 'scroll-driven camera');
+  assert.ok(canvas.includes('dpr={mobile ? [1, 1.75] : [1, 2]}'), 'pixel ratio capped');
+});
+
+test('3D theme: home has scroll prompt and Explore section with real routes', () => {
+  const home = read('app/page.tsx');
+  assert.ok(home.includes('ExploreStudio'), 'home renders the explore section');
+  assert.ok(home.includes("scrollToSection('#about')"), 'hero scroll prompt exists');
+  assert.ok(home.includes('id="about"'), 'about section is the scroll target');
+  const scene = read('components/Scene/ExploreScene.tsx');
+  assert.ok(scene.includes('OrbitControls'), 'orbitable studio scene');
+  assert.ok(scene.includes('Reset view'), 'reset view button');
+  for (const route of ['/team', '/projects', '/achievements', '/gallery']) {
+    assert.ok(scene.includes(`href: '${route}'`), `explore object links to ${route}`);
+  }
+  const explore = read('components/ExploreStudio.tsx');
+  assert.ok(explore.includes("dynamic(() => import('./Scene/ExploreScene'), { ssr: false"), 'studio scene lazy + client-only');
+});

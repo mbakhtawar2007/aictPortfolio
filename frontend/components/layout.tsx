@@ -4,7 +4,7 @@ import { apiGet } from '../lib/api';
 import { sampleSite } from '../lib/sample';
 import type { SiteSettings } from '../lib/types';
 
-function readTheme(): string { if (typeof window === 'undefined') return 'dark'; return window.localStorage.getItem('aict_theme') || 'dark'; }
+function readTheme(): string { if (typeof window === 'undefined') return 'light'; return window.localStorage.getItem('aict_theme') || 'light'; }
 function readReduce(): boolean { if (typeof window === 'undefined') return false; return window.localStorage.getItem('aict_reduce') === 'true'; }
 
 export function ThemeToggle() {

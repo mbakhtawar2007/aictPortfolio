@@ -1,14 +1,18 @@
-/* Neural Studio, dark-first, plain CSS (no Tailwind) to keep the static
-   export build reliable; tokens match spec section 6. Google Fonts are a
-   runtime @import with system fallbacks — a font fetch failure cannot fail
-   the build. All animations use transform/opacity only. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap');
-:root { --bg: #070B16; --surface: rgba(255,255,255,0.05); --surface2: rgba(255,255,255,0.09); --border: rgba(255,255,255,0.10); --text: #EDF1FA; --muted: #9AA6BF; --blue: #3B82F6; --violet: #8B5CF6; --cyan: #06B6D4; --link: #7dd3fc; --danger: #f87171; --success: #34d399; }
-[data-theme='light'] { --bg: #F6F8FC; --surface: rgba(255,255,255,0.85); --surface2: rgba(255,255,255,1); --border: rgba(7,11,22,0.14); --text: #0F172A; --muted: #475569; --link: #1d4ed8; }
+/* 3D portfolio theme (2026-10-30): light-first, plain CSS (no Tailwind)
+   to keep the static export build reliable. Off-white paper, near-black
+   text, one electric-blue accent. Google Fonts are a runtime @import
+   with system fallbacks — a font fetch failure cannot fail the build.
+   All animations use transform/opacity only. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+:root { --bg: #0E1116; --surface: rgba(255,255,255,0.05); --surface2: rgba(255,255,255,0.09); --border: rgba(255,255,255,0.12); --text: #F6F7F9; --muted: #9AA6BF; --blue: #6E9BFF; --violet: #1F5BFF; --cyan: #6E9BFF; --link: #8AB4FF; --accent: #1F5BFF; --danger: #f87171; --success: #34d399; }
+[data-theme='light'] { --bg: #F6F7F9; --surface: #FFFFFF; --surface2: #FFFFFF; --border: rgba(14,17,22,0.12); --text: #0E1116; --muted: #525864; --blue: #1F5BFF; --violet: #1F5BFF; --cyan: #1F5BFF; --link: #1F5BFF; --accent: #1F5BFF; }
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: auto; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; line-height: 1.6; padding-bottom: env(safe-area-inset-bottom); }
-h1, h2, h3 { font-family: 'Space Grotesk', system-ui, sans-serif; line-height: 1.2; }
+h1, h2, h3 { font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; line-height: 1.2; letter-spacing: -0.01em; }
+h1 { font-weight: 300; }
+h2 { font-weight: 400; }
+h3 { font-weight: 600; }
 a { color: var(--link); }
 button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
 button { min-height: 44px; }
@@ -39,9 +43,10 @@ main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
 .hero { padding: 48px 0 24px; position: relative; }
 /* Subtle 3D tilt on cards: the grid supplies the perspective, the card
    lifts and tilts on hover instead of only sliding up. */
-.card-hover:hover { transform: translateY(-2px); border-color: var(--violet); }
+.card-hover { transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
+.card-hover:hover { transform: translateY(-6px); border-color: var(--accent); box-shadow: 0 24px 48px rgba(31, 91, 255, 0.16); }
 .btn:hover { filter: brightness(1.1); }
-.hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin: 0 0 12px; }
+.hero h1 { font-size: clamp(2.6rem, 7vw, 5rem); margin: 0 0 12px; font-weight: 300; letter-spacing: -0.03em; }
 .hero p { color: var(--muted); max-width: 680px; }
 .hero-words { display: inline-block; overflow: hidden; vertical-align: bottom; height: 1.25em; }
 .hero-words span { display: block; animation: wordCycle 12s ease-in-out infinite; color: var(--violet); }
@@ -49,7 +54,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes riseIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .reveal { animation: riseIn 0.5s ease both; }
-.btn { display: inline-block; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--border); background: #4338ca; color: #fff; text-decoration: none; cursor: pointer; font-size: 15px; transition: opacity 0.15s ease, filter 0.15s ease; }
+.btn { display: inline-block; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--border); background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; font-size: 15px; transition: opacity 0.15s ease, filter 0.15s ease; }
 .btn:active { transform: scale(0.96); }
 .btn.secondary { background: transparent; color: var(--text); }
 .btn.danger { background: #b91c1c; border-color: #b91c1c; }
@@ -61,7 +66,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; backdrop-filter: blur(14px); transition: transform 0.2s ease, border-color 0.2s ease; }
 .card img { max-width: 100%; border-radius: 12px; }
 .chip { display: inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; margin: 2px 4px 2px 0; background: transparent; color: var(--text); }
-.chip.active { background: rgba(139,92,246,0.3); }
+.chip.active { background: rgba(31,91,255,0.25); }
 .sample { display: inline-block; background: #f59e0b; color: #111; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
 .muted { color: var(--muted); }
 input, textarea, select { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; margin: 6px 0 14px; }
@@ -112,7 +117,7 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 .heat-cell strong { display: block; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 [data-reduce='true'] *, [data-reduce='true'] *::before, [data-reduce='true'] *::after { animation: none !important; transition: none !important; }
-@media (max-width: 768px) { .nav-links { display: none; } .nav-login { display: none; } .nav-burger { display: inline-block; } .mobile-contact-fab { display: inline-block; position: fixed; left: 16px; bottom: 16px; z-index: 30; background: #6d28d9; color: #fff; padding: 12px 18px; border-radius: 999px; text-decoration: none; } }
+@media (max-width: 768px) { .nav-links { display: none; } .nav-login { display: none; } .nav-burger { display: inline-block; } .mobile-contact-fab { display: inline-block; position: fixed; left: 16px; bottom: 16px; z-index: 30; background: var(--accent); color: #fff; padding: 12px 18px; border-radius: 999px; text-decoration: none; } }
 @media (min-width: 769px) { .modal { border-radius: 20px; } .modal-backdrop { align-items: center; } }
 @media (max-width: 640px) { main { padding: 20px 14px 72px; } .grid { grid-template-columns: 1fr; } .hero { padding: 28px 0 16px; } }
 @media (min-width: 1280px) { main { max-width: 1200px; } }
@@ -158,3 +163,18 @@ footer { border-top: 1px solid var(--border); padding: 20px; text-align: center;
 .admin-page .search-input { border-radius: 12px; padding: 12px 14px; }
 .admin-member-head { display: flex; align-items: center; gap: 12px; }
 .admin-member-head h3 { margin: 0; }
+
+/* 3D theme layering: fixed canvas (z-0) behind positioned content. */
+.ambient-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.ambient-canvas canvas { display: block; }
+.ambient-fallback { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+main { position: relative; z-index: 1; }
+footer { position: relative; z-index: 1; }
+/* Explorable studio scene on the home page. */
+.explore-canvas-wrap { position: relative; height: 480px; overflow: hidden; border-radius: 24px; border: 1px solid var(--border); background: var(--surface); }
+@media (min-width: 768px) { .explore-canvas-wrap { height: 560px; } }
+.explore-canvas-wrap canvas { display: block; }
+.explore-hint { position: absolute; left: 16px; top: 16px; margin: 0; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,0.85); color: #525864; font-size: 12px; pointer-events: none; }
+.explore-reset { position: absolute; right: 16px; bottom: 16px; }
+.explore-panel { margin-top: 16px; }
+.hero-scroll-prompt { margin-top: 28px; }

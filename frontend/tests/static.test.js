@@ -109,3 +109,12 @@ test('cleanup: no unused Loading/SampleBadge imports in public list pages', () =
   }
   assert.ok(!/SampleBadge/.test(read('app/skills/page.tsx')));
 });
+
+test('gallery: public page exists, nav links it, media details and delete are wired', () => {
+  assert.ok(fs.existsSync(path.join(root, 'app/gallery/page.tsx')));
+  assert.match(read('app/gallery/page.tsx'), /apiGet<MediaItem\[\]>\('\/gallery'\)/);
+  assert.match(read('components/layout.tsx'), /\/gallery/);
+  assert.match(read('app/admin/page.tsx'), /media\/meta/);
+  assert.match(read('app/admin/page.tsx'), /kind === 'media'/);
+  assert.match(read('app/member/page.tsx'), /media\/meta/);
+});

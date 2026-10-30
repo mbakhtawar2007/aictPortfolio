@@ -1,5 +1,5 @@
 import express from 'express';
-import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema } from '../validate.js';
+import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, inviteSchema, userPatchSchema, uploadSignSchema, mediaMetaSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema } from '../validate.js';
 import { store, isFirebase } from '../store.js';
 import { authAdmin, firebaseEnabled, demoMode } from '../firebase.js';
 import { requireAdmin, requireMemberOrAdmin, canEditMember, canEditProject } from '../auth.js';
@@ -209,6 +209,34 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
     return ok(res, { verified: true, secure_url: asset.secure_url, format: asset.format, bytes: asset.bytes, resource_type: asset.resource_type });
   } catch { return fail(res, 503, 'upload_unavailable', 'Upload verification is temporarily unavailable.'); }
 }));
+adminRouter.post('/media/meta', requireMemberOrAdmin(async (req, res) => {
+  const p = parseBody(mediaMetaSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
+  const { public_id, title, description } = p.data;
+  if (!public_id.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can have details.');
+  if (req.actor.role !== 'admin' && !public_id.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can add details only to your own uploads.');
+  try {
+    const row = await store.saveMediaMeta(public_id, { title: (title || '').trim(), description: (description || '').trim(), updated_by: req.actor.uid });
+    await audit(store, { user_id: req.actor.uid, action: 'media.meta_saved', entity: 'media', entity_id: public_id });
+    return ok(res, row);
+  } catch { return fail(res, 503, 'unavailable', 'Details could not be saved.'); }
+}));
+adminRouter.delete('/media', requireMemberOrAdmin(async (req, res) => {
+  const publicId = typeof req.query.public_id === 'string' ? req.query.public_id : '';
+  if (!publicId.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be deleted.');
+  if (req.actor.role !== 'admin' && !publicId.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can delete only your own uploads.');
+  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return fail(res, 503, 'upload_unavailable', 'File uploads are not configured.');
+  try {
+    const cloudinary = (await import('cloudinary')).v2;
+    cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
+    const resourceType = publicId.includes('/videos/') ? 'video' : publicId.includes('/resumes/') ? 'raw' : 'image';
+    const destroyed = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    if (destroyed && destroyed.result && destroyed.result !== 'ok' && destroyed.result !== 'not found') return fail(res, 503, 'unavailable', 'The file could not be deleted from storage.');
+    try { await store.deleteMediaMeta(publicId); } catch { /* meta cleanup best effort */ }
+    await audit(store, { user_id: req.actor.uid, action: 'media.delete', entity: 'media', entity_id: publicId });
+    return ok(res, { deleted: true });
+  } catch { return fail(res, 503, 'unavailable', 'The file could not be deleted.'); }
+}));
 adminRouter.post('/revalidate', requireAdmin(async (req, res) => ok(res, { status: 'live_on_next_load', note: 'Public pages fetch live data from this API in the browser, so saved content is live on the next page load with no rebuild. A Netlify rebuild is only needed for code changes, and Netlify auto-builds on a push to main.' })));
 // ---- Achievements (admin list; members see only their own) ----
 adminRouter.get('/achievements', requireMemberOrAdmin(async (req, res) => {
@@ -278,14 +306,16 @@ adminRouter.get('/media', requireMemberOrAdmin(async (req, res) => {
     const cloudinary = (await import('cloudinary')).v2;
     cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
     const result = await cloudinary.search.expression('folder:aict-portfolio/*').sort_by('created_at', 'desc').max_results(50).execute();
-    let items = (result.resources || []).map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, width: r.width, height: r.height }));
+    let items = (result.resources || []).map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, width: r.width, height: r.height, original_filename: r.original_filename || '' }));
     let videoItems = [];
-    try { const vids = await cloudinary.api.resources({ type: 'upload', resource_type: 'video', prefix: 'aict-portfolio/', max_results: 50 }); videoItems = (vids.resources || []).map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, width: r.width, height: r.height })); } catch { /* videos simply absent from the list */ }
+    try { const vids = await cloudinary.api.resources({ type: 'upload', resource_type: 'video', prefix: 'aict-portfolio/', max_results: 50 }); videoItems = (vids.resources || []).map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, width: r.width, height: r.height, original_filename: r.original_filename || '' })); } catch { /* videos simply absent from the list */ }
     items = [...new Map([...items, ...videoItems].map((r) => [r.public_id, r])).values()].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     // Audit fix 2026-10-29 (security review): members previously saw every
     // member's files. Non-admins see only uploads signed under their own UID
     // (public_id is aict-portfolio/<type>/<uid>-<timestamp>).
     if (req.actor.role !== 'admin') items = items.filter((r) => r.public_id.includes(`/${req.actor.uid}-`));
+    // Gallery details: overlay saved titles/descriptions when present.
+    try { const meta = await store.mediaMetaAll(); const byId = new Map(meta.map((m) => [m.public_id, m])); items = items.map((r) => { const m = byId.get(r.public_id); return m ? { ...r, title: m.title || '', description: m.description || '' } : r; }); } catch { /* meta overlay is best effort */ }
     return ok(res, items);
   } catch { return fail(res, 503, 'media_unavailable', 'Media library is temporarily unavailable.'); }
 }));

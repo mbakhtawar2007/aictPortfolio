@@ -15,6 +15,32 @@ publicRouter.get('/members/:slug', async (req, res) => { try { const m = await s
 publicRouter.get('/projects', async (req, res) => { try { return ok(res, await store.projectsPublished()); } catch { return fail(res, 503, 'unavailable', 'Projects are temporarily unavailable.'); } });
 publicRouter.get('/projects/:slug', async (req, res) => { try { const p = await store.projectBySlug(req.params.slug); if (!p) return fail(res, 404, 'not_found', 'Project not found.'); return ok(res, p); } catch { return fail(res, 503, 'unavailable', 'Project is temporarily unavailable.'); } });
 publicRouter.get('/achievements', async (req, res) => { try { return ok(res, await store.achievementsPublished()); } catch { return fail(res, 503, 'unavailable', 'Achievements are temporarily unavailable.'); } });
+function cleanGalleryTitle(name) {
+  const base = String(name || '').replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return base ? base.slice(0, 80) : '';
+}
+publicRouter.get('/gallery', async (req, res) => {
+  // Public gallery: photos and videos only. Resumes are never listed here.
+  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return fail(res, 503, 'gallery_unavailable', 'Gallery is temporarily unavailable.');
+  try {
+    const cloudinary = (await import('cloudinary')).v2;
+    cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
+    const [imgs, vids] = await Promise.all([
+      cloudinary.api.resources({ type: 'upload', resource_type: 'image', prefix: 'aict-portfolio/images', max_results: 50 }),
+      cloudinary.api.resources({ type: 'upload', resource_type: 'video', prefix: 'aict-portfolio/videos', max_results: 50 }),
+    ]);
+    const items = [...(imgs.resources || []), ...(vids.resources || [])].map((r) => ({ public_id: r.public_id, secure_url: r.secure_url, format: r.format, resource_type: r.resource_type, bytes: r.bytes, created_at: r.created_at, original_filename: r.original_filename || '' }));
+    const meta = await store.mediaMetaAll().catch(() => []);
+    const byId = new Map(meta.map((m) => [m.public_id, m]));
+    const out = items.map((r) => {
+      const m = byId.get(r.public_id);
+      const titled = m && m.title ? m.title : cleanGalleryTitle(r.original_filename);
+      return { ...r, title: titled || (r.resource_type === 'video' ? 'Untitled video' : 'Untitled photo'), description: (m && m.description) || '' };
+    }).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    return ok(res, out);
+  } catch { return fail(res, 503, 'gallery_unavailable', 'Gallery is temporarily unavailable.'); }
+});
 publicRouter.post('/contact', async (req, res) => {
   const parsed = parseBody(contactSchema, req.body);
   if (!parsed.ok) return fail(res, 400, 'validation_error', parsed.message);

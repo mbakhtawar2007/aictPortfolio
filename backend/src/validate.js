@@ -112,6 +112,11 @@ export const uploadSignSchema = z.object({
   file_size: z.number().int().positive().max(50 * 1024 * 1024),
   file_name: z.string().min(1).max(200),
 });
+export const mediaMetaSchema = z.object({
+  public_id: z.string().min(1).max(300),
+  title: z.string().max(120).optional(),
+  description: z.string().max(500).optional(),
+});
 
 // Invite-link flow (2026-10-29): admin creates a token invite; the recipient
 // opens /invite?token=... and sets their own password. The accept step takes

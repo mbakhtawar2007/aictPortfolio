@@ -5,7 +5,7 @@ import { demoSite, demoMembers, demoProjects, demoAchievements } from './demoDat
 const clone = (v) => JSON.parse(JSON.stringify(v));
 let demo = null;
 function demoStore() {
-  if (!demo) demo = { site: clone(demoSite), members: clone(demoMembers), projects: clone(demoProjects), achievements: clone(demoAchievements), messages: [], roles: [], audit: [], revisions: [], invites: [] };
+  if (!demo) demo = { site: clone(demoSite), members: clone(demoMembers), projects: clone(demoProjects), achievements: clone(demoAchievements), messages: [], roles: [], audit: [], revisions: [], invites: [], media_meta: [] };
   return demo;
 }
 export function isFirebase() { return firebaseEnabled(); }
@@ -157,6 +157,9 @@ export const store = {
     if (isFirebase()) { await db().collection('invites').doc(id).set({ revoked: true, revoked_at: new Date().toISOString() }, { merge: true }); return; }
     const ex = demoStore().invites.find((i) => i.id === id); if (ex) { ex.revoked = true; ex.revoked_at = new Date().toISOString(); }
   },
+  async mediaMetaAll() { if (isFirebase()) { const s = await db().collection('media_meta').get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); } return demoStore().media_meta; },
+  async saveMediaMeta(publicId, v) { const id = publicId.replaceAll('/', '__'); const row = { id, public_id: publicId, ...v, updated_at: new Date().toISOString() }; if (isFirebase()) { await db().collection('media_meta').doc(id).set(row, { merge: true }); return row; } const d = demoStore(); const ex = d.media_meta.find((m) => m.id === id); if (ex) Object.assign(ex, row); else d.media_meta.push(row); return row; },
+  async deleteMediaMeta(publicId) { const id = publicId.replaceAll('/', '__'); if (isFirebase()) { await db().collection('media_meta').doc(id).delete(); return; } const d = demoStore(); d.media_meta = d.media_meta.filter((m) => m.id !== id); },
   async auditAll(limit = 50, offset = 0) {
     if (isFirebase()) { const s = await db().collection('audit_log').orderBy('created_at', 'desc').limit(limit + offset).get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })).slice(offset, offset + limit); }
     return [...demoStore().audit].reverse().slice(offset, offset + limit);

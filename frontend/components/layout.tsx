@@ -37,7 +37,7 @@ export function Navbar() {
     const onScroll = () => { const h = document.documentElement; const max = h.scrollHeight - h.clientHeight; setProgress(max > 0 ? (h.scrollTop / max) * 100 : 0); };
     window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); return () => window.removeEventListener('scroll', onScroll);
   }, []);
-  const links = [['/', 'Home'], ['/team', 'Team'], ['/projects', 'Projects'], ['/achievements', 'Achievements'], ['/skills', 'Skills'], ['/contact', 'Contact']];
+  const links = [['/', 'Home'], ['/team', 'Team'], ['/projects', 'Projects'], ['/gallery', 'Gallery'], ['/achievements', 'Achievements'], ['/skills', 'Skills'], ['/contact', 'Contact']];
   return (<header className="site-header">
     <div className="progress-bar" style={{ width: `${progress}%` }} aria-hidden="true" />
     <nav className="nav" aria-label="Main navigation">
@@ -65,7 +65,7 @@ export function Footer() {
   const year = new Date().getFullYear();
   return (<footer>
     <p><strong>{siteName}</strong> — homepage, team profiles, projects and achievements.</p>
-    <p><a href="/">Home</a> · <a href="/team">Team</a> · <a href="/projects">Projects</a> · <a href="/achievements">Achievements</a> · <a href="/skills">Skills</a> · <a href="/contact">Contact</a></p>
+    <p><a href="/">Home</a> · <a href="/team">Team</a> · <a href="/projects">Projects</a> · <a href="/gallery">Gallery</a> · <a href="/achievements">Achievements</a> · <a href="/skills">Skills</a> · <a href="/contact">Contact</a></p>
     <p className="muted">© {year} {siteName}</p>
     <p><ReduceToggle /></p>
   </footer>);

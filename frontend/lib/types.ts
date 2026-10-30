@@ -6,5 +6,5 @@ export interface SiteSettings { group_name?: string; tagline?: string; mission?:
 export interface UserRole { id: string; uid?: string; email?: string; name?: string; role?: string; account_status?: string; member_id?: string; invited_at?: string; }
 export interface AuditEntry { id: string; user_id?: string; action?: string; entity?: string; entity_id?: string; created_at?: string; }
 export interface Revision { id: string; entity?: string; entity_id?: string; snapshot?: Record<string, unknown>; created_at?: string; user_id?: string; }
-export interface MediaItem { public_id: string; secure_url: string; format?: string; resource_type?: string; bytes?: number; created_at?: string; width?: number; height?: number; }
+export interface MediaItem { public_id: string; secure_url: string; format?: string; resource_type?: string; bytes?: number; created_at?: string; width?: number; height?: number; title?: string; description?: string; original_filename?: string; }
 export interface ContactMessage { id: string; name: string; email: string; subject?: string; message: string; created_at?: string; read?: boolean; }

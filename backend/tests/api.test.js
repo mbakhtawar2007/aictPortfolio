@@ -204,3 +204,17 @@ test('invite link: revoke kills the link, accept takes no role/email (no escalat
   const me = users.json.data.find((u) => u.email === 'escalate@example.local');
   assert.equal(me.role, 'member');
 });
+
+test('media details: admin saves details, member cannot save details for another upload, delete and gallery fail closed without Cloudinary', async () => {
+  const own = 'aict-portfolio/images/demo-member-111';
+  const saved = await call('POST', '/api/admin/media/meta', ADMIN, { public_id: own, title: 'Test photo', description: 'A test caption.' });
+  assert.equal(saved.status, 200); assert.equal(saved.json.data.title, 'Test photo');
+  const bad = await call('POST', '/api/admin/media/meta', ADMIN, { public_id: 'elsewhere/x', title: 'Nope' });
+  assert.equal(bad.status, 400);
+  const foreign = await call('POST', '/api/admin/media/meta', MEMBER, { public_id: 'aict-portfolio/images/someone-else-111', title: 'Nope' });
+  assert.equal(foreign.status, 403);
+  const del = await call('DELETE', '/api/admin/media?public_id=' + encodeURIComponent(own), ADMIN);
+  assert.equal(del.status, 503);
+  const gal = await call('GET', '/api/gallery');
+  assert.equal(gal.status, 503);
+});

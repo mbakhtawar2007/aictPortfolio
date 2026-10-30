@@ -61,7 +61,7 @@ export default function AdminDashboard() {
   const [passwordDraft, setPasswordDraft] = useState<Record<string, string>>({}); const [passwordConfirmDraft, setPasswordConfirmDraft] = useState<Record<string, string>>({}); const [confirmUserAction, setConfirmUserAction] = useState<{ id: string; kind: string; body?: unknown; label: string } | null>(null);
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>({});
   const [revEntity, setRevEntity] = useState(''); const [revId, setRevId] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image'); const [uploadKey, setUploadKey] = useState(0);
+  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image'); const [uploadKey, setUploadKey] = useState(0); const [uploadTitle, setUploadTitle] = useState(''); const [uploadDescription, setUploadDescription] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0); const [uploadBusy, setUploadBusy] = useState(false); const [uploadUrl, setUploadUrl] = useState('');
   const [memberQuery, setMemberQuery] = useState(''); const [projectQuery, setProjectQuery] = useState(''); const [achievementQuery, setAchievementQuery] = useState('');
 
@@ -102,7 +102,7 @@ export default function AdminDashboard() {
 
   async function doDelete() {
     if (!deleting) return; setDeleteBusy(true);
-    const path = deleting.kind === 'member' ? `/admin/members/${deleting.id}` : deleting.kind === 'project' ? `/admin/projects/${deleting.id}` : deleting.kind === 'achievement' ? `/admin/achievements/${deleting.id}` : `/admin/messages/${deleting.id}`;
+    const path = deleting.kind === 'member' ? `/admin/members/${deleting.id}` : deleting.kind === 'project' ? `/admin/projects/${deleting.id}` : deleting.kind === 'achievement' ? `/admin/achievements/${deleting.id}` : deleting.kind === 'media' ? `/admin/media?public_id=${encodeURIComponent(deleting.id)}` : `/admin/messages/${deleting.id}`;
     const r = await apiSend(path, 'DELETE', {}, true); setDeleteBusy(false);
     if (r.error) { push('error', r.error.message); } else { push('success', 'Deleted.'); setDeleting(null); reload(); }
   }
@@ -200,7 +200,7 @@ export default function AdminDashboard() {
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };
-    xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const v = await apiSend('/admin/upload/verify', 'POST', { public_id: String(d.public_id), file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } setUploadUrl(String((v.data as Record<string, unknown>).secure_url || j.secure_url)); push('success', 'Upload complete and verified by the server. Copy the URL into a member or project form.'); setUploadFile(null); setUploadKey((k) => k + 1); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
+    xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const v = await apiSend('/admin/upload/verify', 'POST', { public_id: String(d.public_id), file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } const meta = await apiSend('/admin/media/meta', 'POST', { public_id: String(d.public_id), title: uploadTitle, description: uploadDescription }, true); if (meta.error) push('error', 'Upload verified, but its title could not be saved.'); setUploadUrl(String((v.data as Record<string, unknown>).secure_url || j.secure_url)); push('success', 'Upload complete and verified by the server. Photos and videos also appear in the public gallery.'); setUploadFile(null); setUploadTitle(''); setUploadDescription(''); setUploadKey((k) => k + 1); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
     xhr.onerror = () => { setUploadBusy(false); push('error', 'Upload failed (network).'); };
     xhr.open('POST', endpoint); xhr.send(form);
   }
@@ -309,11 +309,13 @@ export default function AdminDashboard() {
       <form onSubmit={upload}><h3>Upload</h3>
         <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option><option value="video">Video (MP4/WebM, max 50 MB)</option></select></label>
         <label>File<input key={uploadKey} type="file" accept={uploadType === 'video' ? 'video/mp4,video/webm' : uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
+        <label>Title (shows in the public gallery)<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="e.g. Team at the tech fest" maxLength={120} /></label>
+        <label>Description<textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} placeholder="A short description (optional)" maxLength={500} rows={3} /></label>
         {uploadBusy && <p>Uploading… {uploadProgress}%</p>}
         {uploadUrl && <p className="success">Uploaded: {uploadUrl} <CopyButton text={uploadUrl} label="Copy URL" /></p>}
         <p><button className="btn" disabled={uploadBusy}>{uploadBusy ? 'Uploading…' : 'Upload'}</button></p>
         <p className="muted">Uploads are checked by the server first. Your Cloudinary secret keys never reach the browser. After uploading, copy the URL into a member or project form.</p></form>
-      <div className="grid">{media.map((f) => (<div className="card" key={f.public_id}>{f.resource_type === 'video' ? <video controls src={f.secure_url} style={{ maxWidth: '100%', borderRadius: 12 }} /> : f.resource_type === 'image' ? <img src={f.secure_url} alt={f.public_id} style={{ maxWidth: '100%', borderRadius: 12 }} /> : <p>{f.public_id} ({f.format})</p>}<p className="muted">{f.public_id} · {f.format} · {f.bytes ? `${Math.round(f.bytes / 1024)} KB` : ''} · {f.created_at}</p><CopyButton text={f.secure_url} label="Copy URL" /></div>))}</div>
+      <div className="grid">{media.map((f) => (<div className="card" key={f.public_id}>{f.resource_type === 'video' ? <video controls src={f.secure_url} style={{ maxWidth: '100%', borderRadius: 12 }} /> : f.resource_type === 'image' ? <img src={f.secure_url} alt={f.title || f.public_id} style={{ maxWidth: '100%', borderRadius: 12 }} /> : <p>{f.public_id} ({f.format})</p>}{f.title ? <h3>{f.title}</h3> : null}{f.description ? <p>{f.description}</p> : null}<p className="muted">{f.public_id} · {f.format} · {f.bytes ? `${Math.round(f.bytes / 1024)} KB` : ''} · {f.created_at}</p><p><CopyButton text={f.secure_url} label="Copy URL" />{' '}<button className="btn secondary small" onClick={() => setDeleting({ kind: 'media', id: f.public_id, label: f.title || f.public_id })}>Delete</button></p></div>))}</div>
       {!media.length && !mediaError && <p className="muted">No files yet. Upload a photo, resume or video above, then paste its URL into a form.</p>}</div>)}
 
     {tab === 'audit' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div><h2>History</h2><p className="muted">Who changed what, and when. This is a record — it cannot be edited from here.</p>

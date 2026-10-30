@@ -40,7 +40,6 @@ export async function uploadDirectFile(
     form.append('file', file);
     form.append('api_key', String(d.api_key));
     form.append('timestamp', String(d.timestamp));
-    form.append('folder', String(d.folder));
     form.append('public_id', String(d.public_id));
     form.append('signature', String(d.signature));
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${fileType === 'pdf' ? 'raw' : 'image'}/upload`;

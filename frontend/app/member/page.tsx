@@ -60,7 +60,7 @@ export default function MemberPage() {
     if (sign.error || !sign.data) { push('error', sign.error?.message || 'Upload signing is unavailable.'); setUploadBusy(false); return; }
     const d = sign.data as Record<string, unknown>;
     const form = new FormData();
-    form.append('file', uploadFile); form.append('api_key', String(d.api_key)); form.append('timestamp', String(d.timestamp)); form.append('folder', String(d.folder)); form.append('public_id', String(d.public_id)); form.append('signature', String(d.signature));
+    form.append('file', uploadFile); form.append('api_key', String(d.api_key)); form.append('timestamp', String(d.timestamp)); form.append('public_id', String(d.public_id)); form.append('signature', String(d.signature));
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };

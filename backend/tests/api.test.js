@@ -247,3 +247,21 @@ test('invite link without mail configured returns the link with link_only delive
   assert.equal(created.json.data.email_delivery, 'link_only');
   assert.ok(created.json.data.invite_link.includes('/invite?token='));
 });
+
+test('upload sign: signed params exclude folder so Cloudinary cannot double the path (2026-10-30 verify 404)', async () => {
+  process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+  process.env.CLOUDINARY_API_KEY = 'test-key';
+  process.env.CLOUDINARY_API_SECRET = 'test-secret';
+  try {
+    const r = await call('POST', '/api/admin/upload/sign', ADMIN, { file_type: 'image', file_size: 10, file_name: 'x.jpg' });
+    assert.equal(r.status, 200);
+    const d = r.json.data;
+    assert.ok(d.public_id.startsWith('aict-portfolio/images/demo-admin-'));
+    assert.ok(!('folder' in d), 'sign must not return a folder for the browser to send');
+    const { v2 } = await import('cloudinary');
+    const expected = v2.utils.api_sign_request({ timestamp: d.timestamp, public_id: d.public_id }, 'test-secret');
+    assert.equal(d.signature, expected);
+  } finally {
+    delete process.env.CLOUDINARY_CLOUD_NAME; delete process.env.CLOUDINARY_API_KEY; delete process.env.CLOUDINARY_API_SECRET;
+  }
+});

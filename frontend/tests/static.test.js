@@ -208,3 +208,10 @@ test('hero shows the AICT full form', () => {
   assert.ok(home.includes('Application of Information and Communication Technologies'));
   assert.ok(home.includes('hero-fullform'));
 });
+
+test('upload: browser never sends folder separately (2026-10-30 doubled-path verify 404)', () => {
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx', 'lib/upload.ts']) {
+    assert.ok(!read(f).includes("form.append('folder'"), f + ' must not send folder');
+  }
+  assert.ok(read('lib/upload.ts').includes("form.append('public_id'"));
+});

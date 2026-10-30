@@ -39,8 +39,8 @@ export default function InvitePage() {
   }
 
   if (checking) return <Loading />;
-  if (done) return (<div><h1>Account created</h1><p className="success">Your account is ready. You can now sign in with your email and the password you just set.</p><p><a className="btn" href="/admin/login">Go to login</a></p></div>);
-  if (error || !info) return (<div><h1>Invitation</h1><ErrorBox message={error} /><p className="muted">Invitation links expire after 7 days and work only once. If yours has expired, ask an admin for a new one.</p><p><a href="/admin/login">Go to login</a>{' '}<a href="/">Back home</a></p></div>);
+  if (done) return (<div><h1>Account created</h1><p className="success">Your account is ready. You can now sign in with your email and the password you just set.</p><p><a className="btn" href="/login">Go to login</a></p></div>);
+  if (error || !info) return (<div><h1>Invitation</h1><ErrorBox message={error} /><p className="muted">Invitation links expire after 7 days and work only once. If yours has expired, ask an admin for a new one.</p><p><a href="/login">Go to login</a>{' '}<a href="/">Back home</a></p></div>);
   return (<div><h1>Create your account</h1>
     <p>You have been invited to the AICT group portfolio.</p>
     <p><strong>Email:</strong> {info.email}<br /><strong>Role:</strong> {info.role === 'admin' ? 'Admin' : 'Team member'}{info.name ? <><br /><strong>Name:</strong> {info.name}</> : null}</p>

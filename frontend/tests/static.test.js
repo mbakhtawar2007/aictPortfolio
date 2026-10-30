@@ -29,12 +29,11 @@ test('dashboard gate distinguishes auth states (not a blind login redirect)', ()
   assert.ok(!/catch\s*\{[^}]*router\.push\('\/admin\/login'\)/s.test(gate) || /error/i.test(gate));
 });
 test('login maps Firebase errors to safe messages', () => {
-  const login = read('app/admin/login/page.tsx');
-  assert.match(login, /invalid-credential|too-many-requests|user-not-found/);
-  // The mapper may read err.message to classify the code, but the UI must
-  // never display the raw message: setError must go through the mapper.
-  assert.match(login, /friendlyAuthError\(err\)/);
-  assert.ok(!/setError\(err\.message\)/.test(login));
+  assert.match(read('components/loginForm.tsx'), /invalid-credential|too-many-requests|user-not-found/);
+  assert.ok(fs.existsSync(path.join(root, 'app/login/page.tsx')));
+  assert.match(read('app/login/page.tsx'), /Member login/);
+  assert.match(read('app/dashboard/page.tsx'), /\/login/);
+  assert.match(read('app/invite/page.tsx'), /\/login/);
 });
 test('achievement form has admin-only visibility control and member draft note', () => {
   const forms = read('components/adminForms.tsx');

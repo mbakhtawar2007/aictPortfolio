@@ -31,10 +31,10 @@ export default function MemberPage() {
     const me = await apiGet<{ role: string }>('/admin/me', true);
     if (me.data?.role === 'admin') { window.location.href = '/admin'; return; }
     if (me.error) {
-      if (me.error.code === 'unauthenticated') { window.location.href = '/admin/login'; return; }
+      if (me.error.code === 'unauthenticated') { window.location.href = '/login'; return; }
       setGateError(me.error.message); setLoading(false); return;
     }
-    if (!me.data) { window.location.href = '/admin/login'; return; }
+    if (!me.data) { window.location.href = '/login'; return; }
     const [m, p, a, med] = await Promise.all([
       apiGet<Member[]>('/admin/members', true), apiGet<Project[]>('/admin/projects', true),
       apiGet<Achievement[]>('/admin/achievements', true), apiGet<MediaItem[]>('/admin/media', true),
@@ -70,14 +70,14 @@ export default function MemberPage() {
   }
 
   if (loading) return <Loading />;
-  if (!token) return (<div><h1>My page</h1><p className="error">Sign-in required. <a href="/admin/login">Go to login</a></p></div>);
-  if (gateError) return (<div><h1>My page</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={reload}>Try again</button>{' '}<button className="btn secondary" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out.</p></div>);
+  if (!token) return (<div><h1>My page</h1><p className="error">Sign-in required. <a href="/login">Go to login</a></p></div>);
+  if (gateError) return (<div><h1>My page</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={reload}>Try again</button>{' '}<button className="btn secondary" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/login'; }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out.</p></div>);
   const myProfile = members[0];
   const needsProfile = members.length === 0;
   return (<div><h1>My page</h1>
     {Object.keys(sectionErrors).length > 0 && (<div><ErrorBox message={`Some sections could not be loaded: ${Object.entries(sectionErrors).map(([k, v]) => `${k === 'members' ? 'My profile' : k === 'projects' ? 'My projects' : k === 'achievements' ? 'My achievements' : k === 'media' ? 'My uploads' : k} — ${v}`).join('; ')}`} /><p><button className="btn secondary" onClick={reload}>Try loading again</button></p><p className="muted">Sections that failed are not empty — their data simply did not arrive.</p></div>)}
     <p className="muted">This is your own page only. You cannot see other members' accounts, messages, or site settings.</p>
-    <p><button className="btn secondary small" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></p>
+    <p><button className="btn secondary small" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/login'; }}>Sign out</button></p>
 
     <section className="form-section"><h2>My profile</h2>
       {needsProfile && (<div><p>You don't have a profile yet. Create it here — it will be saved as a draft, and an admin will review and publish it.</p><p><button className="btn" onClick={() => { setSelfCreate(true); setEditingMember({}); }}>Create my profile</button></p></div>)}

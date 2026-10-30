@@ -74,7 +74,7 @@ export default function AdminDashboard() {
     const me = await apiGet<{ role: string }>('/admin/me', true);
     if (me.data?.role === 'member') { window.location.href = '/member'; return; }
     if (me.error) {
-      if (me.error.code === 'unauthenticated') { window.location.href = '/admin/login'; return; }
+      if (me.error.code === 'unauthenticated') { window.location.href = '/login'; return; }
       setGateError(me.error.message); setLoading(false); return;
     }
     setIsAdmin(me.data?.role === 'admin');
@@ -206,8 +206,8 @@ export default function AdminDashboard() {
   }
 
   if (loading) return <Loading />;
-  if (!token) return (<div><h1>Admin dashboard</h1><p className="error">Sign-in required. <a href="/admin/login">Go to login</a></p><p className="muted">There is no sign-up on this site. An admin must invite you first.</p></div>);
-  if (gateError) return (<div><h1>Admin dashboard</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={reload}>Try again</button>{' '}<button className="btn secondary" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out — retry once the backend recovers.</p></div>);
+  if (!token) return (<div><h1>Admin dashboard</h1><p className="error">Sign-in required. <a href="/login">Go to login</a></p><p className="muted">There is no sign-up on this site. An admin must invite you first.</p></div>);
+  if (gateError) return (<div><h1>Admin dashboard</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={reload}>Try again</button>{' '}<button className="btn secondary" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/login'; }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out — retry once the backend recovers.</p></div>);
   const unread = messages.filter((m) => !m.read).length;
   const filteredMembers = members.filter((m) => (m.full_name + ' ' + (m.role_title || '')).toLowerCase().includes(memberQuery.toLowerCase()));
   const filteredProjects = projects.filter((p) => (p.title + ' ' + (p.category || '')).toLowerCase().includes(projectQuery.toLowerCase()));
@@ -219,7 +219,7 @@ export default function AdminDashboard() {
   return (<div className="admin-page"><h1 className="admin-title">Admin dashboard</h1>
     <p className="muted">Signed in as <span className="chip admin-role-chip">{isAdmin ? 'Admin' : 'Team member'}</span>. Admins can edit everything. Team members can only edit their own profile and projects they are assigned to.</p>
     <nav className="admin-nav" aria-label="Admin sections">{NAV_GROUPS_VISIBLE.map((g) => (<div className="admin-nav-group" key={g.label}><span className="admin-nav-label">{g.label}</span><div className="tabs admin-tabs" role="tablist" aria-label={`${g.label} sections`}>{g.tabs.map((t) => (<button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} id={`admin-tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls="admin-panel" tabIndex={tab === t.id ? 0 : -1} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} onKeyDown={(e) => onTabKey(e, t.id)}>{t.label}{t.id === 'messages' && unread > 0 ? ` (${unread})` : ''}</button>))}</div></div>))}
-      <button className="btn secondary small" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/admin/login'; }}>Sign out</button></nav>
+      <button className="btn secondary small" onClick={() => { window.localStorage.removeItem('aict_admin_token'); window.location.href = '/login'; }}>Sign out</button></nav>
     {visibleErrors.length > 0 && (<div><ErrorBox message={`Some sections could not be loaded: ${visibleErrors.map(([k, v]) => `${plainSection(k)} — ${v}`).join('; ')}`} /><p><button className="btn secondary" onClick={reload}>Try loading again</button></p><p className="muted">Sections that failed are not empty — their data simply did not arrive. Other sections still show their data.</p></div>)}
     <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`}>
 

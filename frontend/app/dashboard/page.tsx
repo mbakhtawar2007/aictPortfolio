@@ -13,16 +13,16 @@ export default function DashboardGate() {
   const check = async () => {
     setGateError('');
     const token = window.localStorage.getItem('aict_admin_token');
-    if (!token) { window.location.href = '/admin/login'; return; }
+    if (!token) { window.location.href = '/login'; return; }
     const me = await apiGet<{ role: string }>('/admin/me', true);
     if (me.data?.role === 'admin') window.location.href = '/admin';
     else if (me.data?.role === 'member') window.location.href = '/member';
-    else if (me.error?.code === 'unauthenticated') window.location.href = '/admin/login';
+    else if (me.error?.code === 'unauthenticated') window.location.href = '/login';
     else setGateError(me.error?.message || 'Could not check your account. The backend may be temporarily unavailable — your sign-in has not been lost.');
   };
   useEffect(() => { check(); }, []);
   if (gateError) return (<div><h1>Checking your account</h1><ErrorBox message={gateError} />
-    <p><button className="btn" onClick={check}>Try again</button>{' '}<a className="btn secondary" href="/admin/login">Back to login</a></p>
+    <p><button className="btn" onClick={check}>Try again</button>{' '}<a className="btn secondary" href="/login">Back to login</a></p>
     <p className="muted">If this keeps failing, the backend may be down. Signing in again will not help until it recovers.</p></div>);
   return (<div><h1>Checking your account</h1><Loading /></div>);
 }

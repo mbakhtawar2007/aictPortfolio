@@ -178,3 +178,6 @@ footer { position: relative; z-index: 1; }
 .explore-reset { position: absolute; right: 16px; bottom: 16px; }
 .explore-panel { margin-top: 16px; }
 .hero-scroll-prompt { margin-top: 28px; }
+
+/* Full-form subtitle under the hero group name. */
+.hero-fullform { color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; margin: 0 0 8px; }

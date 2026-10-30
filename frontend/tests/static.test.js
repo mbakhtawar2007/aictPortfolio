@@ -202,3 +202,9 @@ test('3D theme: home has scroll prompt and Explore section with real routes', ()
   const explore = read('components/ExploreStudio.tsx');
   assert.ok(explore.includes("dynamic(() => import('./Scene/ExploreScene'), { ssr: false"), 'studio scene lazy + client-only');
 });
+
+test('hero shows the AICT full form', () => {
+  const home = read('app/page.tsx');
+  assert.ok(home.includes('Application of Information and Communication Technologies'));
+  assert.ok(home.includes('hero-fullform'));
+});

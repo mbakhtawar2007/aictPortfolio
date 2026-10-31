@@ -299,3 +299,10 @@ test('video project cards and details: thumbnail, storyline, characters, team (2
   assert.match(css, /\.project-thumb/, 'thumbnail CSS exists');
   assert.match(css, /aspect-ratio: 16 \/ 9/, 'thumbnails keep a 16:9 ratio on any screen');
 });
+
+test('dropdown options are readable in dark theme (2026-10-31 Uploads screenshot)', () => {
+  const css = read('styles/globals.css');
+  assert.match(css, /color-scheme: dark/, 'dark theme must tell the browser to render native controls dark');
+  assert.match(css, /color-scheme: light/, 'light theme must tell the browser to render native controls light');
+  assert.match(css, /select option \{ background-color: var\(--bg\); color: var\(--text\); \}/, 'options must carry explicit background + text colours, not inherit translucent select colours');
+});

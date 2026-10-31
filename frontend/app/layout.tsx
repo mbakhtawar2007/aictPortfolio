@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import '../styles/globals.css';
-import { Navbar, Footer, BackToTop } from '../components/layout';
+import { Navbar, Footer, BackToTop, PageTitle } from '../components/layout';
 import SmoothScroll from '../components/SmoothScroll';
 import CosmicBackgroundLoader from '../components/Scene/CosmicBackgroundLoader';
 import TokenRefresher from '../components/TokenRefresher';
@@ -12,6 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en"><body>
       <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       <SmoothScroll />
+      <PageTitle />
       <CosmicBackgroundLoader />
       <TokenRefresher />
       <a className="skip-link" href="#main-content">Skip to main content</a>

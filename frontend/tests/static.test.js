@@ -541,3 +541,28 @@ test('site rename to TechHive (2026-10-31): displayed name is TechHive, not AICT
     assert.ok(!/AICT Group/.test(read(f)), f + ' must not fall back to the old site name');
   }
 });
+
+test('UI/UX audit (2026-10-31): reduced-motion, mobile menu trap, page titles, invite show/hide', () => {
+  const scroll = read('lib/scroll3d.ts');
+  assert.match(scroll, /export function reducedMotion/, 'reducedMotion helper must exist');
+  assert.match(scroll, /data-reduce/, 'reduced check must include the site Reduce toggle, not only the OS setting');
+  assert.match(scroll, /export function applySmoothScrollPreference/, 'live preference re-apply must exist');
+  const layout = read('components/layout.tsx');
+  assert.match(layout, /applySmoothScrollPreference\(\)/, 'Reduce toggle must re-apply the scroll preference');
+  assert.match(layout, /menuRef/, 'mobile menu must carry a ref for focus trapping');
+  assert.match(layout, /e.key !== 'Tab'/, 'mobile menu key handler must trap Tab, not only Escape');
+  assert.match(layout, /export function PageTitle/, 'per-page titles component must exist');
+  assert.match(layout, /Team \| TechHive/, 'team page title must be mapped');
+  assert.match(read('app/layout.tsx'), /<PageTitle \/>/, 'PageTitle must be mounted in the root layout');
+  const ui = read('components/ui.tsx');
+  assert.match(ui, /export function focusables/, 'focus helper must be shared with the mobile menu');
+  const home = read('app/page.tsx');
+  assert.match(home, /aria-hidden="true">AI videos<\/span>/, 'rotating hero words must be hidden from screen readers (wrapper aria-label reads once)');
+  const invite = read('app/invite/page.tsx');
+  assert.match(invite, /showPw/, 'invite password field must offer show/hide');
+  assert.match(invite, /aria-pressed=\{showPw\}/, 'invite show/hide must expose pressed state');
+  assert.match(read('styles/globals.css'), /footer a \{ display: inline-block; padding: 11px 6px; \}/, 'footer links must reach ~44px targets');
+  assert.match(read('styles/globals.css'), /\.nav \{ display: flex; flex-wrap: wrap;/, 'nav must wrap instead of overflowing at ~800px');
+  assert.match(read('app/team/[slug]/detail.tsx'), /document\.title = `\$\{member\.full_name\} \| TechHive`/, 'member detail must set a specific title');
+  assert.match(read('app/projects/[slug]/detail.tsx'), /document\.title = `\$\{project\.title\} \| TechHive`/, 'project detail must set a specific title');
+});

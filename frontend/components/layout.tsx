@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { apiGet } from '../lib/api';
+import { applySmoothScrollPreference } from '../lib/scroll3d';
+import { focusables } from './ui';
 import type { SiteSettings } from '../lib/types';
 import { safeSrc } from '../lib/safeUrl';
 
@@ -15,8 +17,32 @@ export function ThemeToggle() {
 }
 export function ReduceToggle() {
   const [reduce, setReduce] = useState<boolean>(() => readReduce());
-  const toggle = () => { const next = !reduce; document.documentElement.setAttribute('data-reduce', next ? 'true' : 'false'); window.localStorage.setItem('aict_reduce', next ? 'true' : 'false'); setReduce(next); };
+  const toggle = () => { const next = !reduce; document.documentElement.setAttribute('data-reduce', next ? 'true' : 'false'); window.localStorage.setItem('aict_reduce', next ? 'true' : 'false'); setReduce(next); applySmoothScrollPreference(); };
   return (<button className="btn secondary small" aria-pressed={reduce} onClick={toggle}>{reduce ? '✓ Effects reduced' : 'Reduce effects'}</button>);
+}
+const PAGE_TITLES: [RegExp, string][] = [
+  [/^\/$/, 'TechHive'],
+  [/^\/team\/[^/]+$/, 'Team member | TechHive'],
+  [/^\/team$/, 'Team | TechHive'],
+  [/^\/projects\/[^/]+$/, 'Project | TechHive'],
+  [/^\/projects$/, 'Projects | TechHive'],
+  [/^\/skills$/, 'Skills | TechHive'],
+  [/^\/contact$/, 'Contact | TechHive'],
+  [/^\/admin\/login$/, 'Admin login | TechHive'],
+  [/^\/admin$/, 'Admin | TechHive'],
+  [/^\/login$/, 'Member login | TechHive'],
+  [/^\/member$/, 'My profile | TechHive'],
+  [/^\/dashboard$/, 'Dashboard | TechHive'],
+  [/^\/invite$/, 'Invitation | TechHive'],
+];
+/** Per-page browser titles (the static export has one root title for every page). Detail pages override this after their data loads. */
+export function PageTitle() {
+  const pathname = usePathname() || '/';
+  useEffect(() => {
+    const hit = PAGE_TITLES.find(([re]) => re.test(pathname));
+    document.title = hit ? hit[1] : 'TechHive';
+  }, [pathname]);
+  return null;
 }
 export function Navbar() {
   const [site, setSite] = useState<SiteSettings | null>(null);
@@ -24,10 +50,19 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
   const burgerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); burgerRef.current?.focus(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setOpen(false); burgerRef.current?.focus(); return; }
+      // Trap Tab inside the menu: it is a modal dialog, so focus must not escape to the page behind it.
+      if (e.key !== 'Tab' || !menuRef.current) return;
+      const items = focusables(menuRef.current); if (!items.length) { e.preventDefault(); return; }
+      const firstEl = items[0]; const lastEl = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+      else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
@@ -45,7 +80,7 @@ export function Navbar() {
       <span className="nav-actions"><a className="btn secondary small nav-login" href="/admin/login">Admin login</a><a className="btn secondary small nav-login" href="/login">Member login</a><ThemeToggle />
         <button ref={burgerRef} className="icon-btn nav-burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen(true)}>☰</button></span>
     </nav>
-    {open && (<div className="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu">
+    {open && (<div className="mobile-menu" id="mobile-menu" ref={menuRef} role="dialog" aria-modal="true" aria-label="Menu">
       <button ref={closeRef} className="icon-btn mobile-close" aria-label="Close menu" onClick={() => { setOpen(false); burgerRef.current?.focus(); }}>×</button>
       {links.map(([href, label]) => (<a key={href} href={href} onClick={() => setOpen(false)}>{label}</a>))}
       <a className="btn" href="/contact" onClick={() => setOpen(false)}>Contact</a>

@@ -23,7 +23,7 @@ export default function ProjectDetail({ slug }: { slug: string }) {
       }
       const [r, m, a] = await Promise.all([apiGet<Project>(`/projects/${encodeURIComponent(actualSlug)}`), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects')]);
       const project = (!r.error && r.data) ? r.data : null;
-      if (!project) setError(r.error ? r.error.message : 'Project not found.'); else setP(project);
+      if (!project) setError(r.error ? r.error.message : 'Project not found.'); else { setP(project); document.title = `${project.title} | TechHive`; }
       setMembers(m.data || []); setAll(a.data || []);
       setLoading(false);
     })();

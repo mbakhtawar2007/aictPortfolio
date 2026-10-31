@@ -33,6 +33,7 @@ export default function MemberDetail({ slug }: { slug: string }) {
       const effProjects = p.data || [];
       const effMembers = ms.data || [];
       const effAchievements = a.data || [];
+      if (member) document.title = `${member.full_name} | TechHive`;
       setProjects(effProjects.filter((x) => (x.member_ids || []).includes(member?.id || '')));
       setAllMembers(effMembers); setAchievements(effAchievements.filter((x) => x.member_id === member?.id));
       setLoading(false);

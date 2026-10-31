@@ -43,7 +43,7 @@ export default function Home() {
     <div className="hero reveal">
       <h1>{site?.group_name || 'TechHive'}</h1>
       <p className="hero-fullform">Application of Information and Communication Technologies</p>
-      <h2>We create <span className="hero-words" aria-label="AI videos, AI tools, websites, stories"><span>AI videos</span><span>AI tools</span><span>websites</span><span>stories</span></span></h2>
+      <h2>We create <span className="hero-words" aria-label="AI videos, AI tools, websites, stories"><span aria-hidden="true">AI videos</span><span aria-hidden="true">AI tools</span><span aria-hidden="true">websites</span><span aria-hidden="true">stories</span></span></h2>
       <p>{site?.tagline || 'Who we are, what we build, and what we have achieved.'}</p>
       <p><a className="btn" href="/team">Meet the Team</a> <a className="btn secondary" href="/projects">View Projects</a></p>
       <p><button type="button" className="btn secondary hero-scroll-prompt" onClick={() => scrollToSection('#about')} aria-label="Scroll down to the about section">↓ Scroll to explore</button></p>

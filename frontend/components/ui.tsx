@@ -15,8 +15,8 @@ export function Toasts({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: num
 export function SkeletonGrid({ count = 3 }: { count?: number }) {
   return (<div className="grid" aria-label="Loading">{Array.from({ length: count }).map((_, i) => (<div className="card skeleton" key={i}><div className="sk-line sk-title" /><div className="sk-line" /><div className="sk-line sk-short" /></div>))}</div>);
 }
-// Focusable elements inside a container, in DOM order.
-function focusables(root: HTMLElement): HTMLElement[] {
+// Focusable elements inside a container, in DOM order. Shared by dialogs and the mobile menu.
+export function focusables(root: HTMLElement): HTMLElement[] {
   const els = Array.from(root.querySelectorAll<HTMLElement>(
     'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
   return els.filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);

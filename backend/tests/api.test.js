@@ -31,7 +31,7 @@ async function call(method, path, token, body) {
   const json = await res.json().catch(() => ({}));
   return { status: res.status, json };
 }
-const ADMIN = 'demo-admin-token'; const MEMBER = 'demo-member-token';
+const ADMIN = 'demo-admin-token'; const MEMBER = 'demo-member-token'; const UNLINKED = 'demo-unlinked-token';
 const uid = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 test('public: health, published-only lists, missing detail 404', async () => {
@@ -165,10 +165,15 @@ test('slug format and whitespace validation', async () => {
   assert.equal((await call('POST', '/api/admin/members', ADMIN, { slug: 'Bad Slug!', full_name: 'X' })).status, 400);
   assert.equal((await call('POST', '/api/admin/members', ADMIN, { slug: uid('ws'), full_name: '   ' })).status, 400);
 });
-test.skip('profile-less member cannot create projects/achievements (needs an unlinked demo identity)', async () => {
-  // Demo mode only ships two fixed tokens (linked admin/member); there is
-  // no unlinked member token, so this guard is verified by code inspection
-  // of the profile-less 403 in routes/admin.js, not by this suite.
+test('profile-less member cannot create projects/achievements', async () => {
+  const me = await call('GET', '/api/admin/me', UNLINKED);
+  assert.equal(me.json.data.role, 'member'); assert.equal(me.json.data.member_id, '');
+  assert.equal((await call('POST', '/api/admin/projects', UNLINKED, { slug: uid('unlinked-proj'), title: 'Nope' })).status, 403);
+  assert.equal((await call('POST', '/api/admin/achievements', UNLINKED, { title: 'Nope' })).status, 403);
+  // The linked demo member still can (as a draft).
+  const okProj = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('linked-proj'), title: 'Linked' });
+  assert.equal(okProj.status, 201); assert.equal(okProj.json.data.status, 'draft');
+  await call('DELETE', `/api/admin/projects/${okProj.json.data.id}`, ADMIN);
 });
 
 test('invite link: create (admin only), validate, accept creates account, token single-use', async () => {
@@ -349,4 +354,20 @@ test('resume proxy: unknown member 404s; demo member without Cloudinary env fall
   assert.equal(r.status, 302);
   assert.equal(r.headers.get('location'), 'https://res.cloudinary.com/test/raw/upload/v1/aict-portfolio/resumes/test-1.pdf');
   await store.deleteMember('test-resume-member');
+});
+
+test('video uploads: only Group Leader and admins (2026-10-31)', async () => {
+  // Demo member (sample-member-1) is not the leader by default.
+  assert.equal((await call('POST', '/api/admin/upload/sign', MEMBER, { file_type: 'video', file_size: 10, file_name: 'x.mp4' })).status, 403);
+  assert.equal((await call('POST', '/api/admin/upload/sign', ADMIN, { file_type: 'video', file_size: 10, file_name: 'x.mp4' })).status, 503); // passes the gate, no Cloudinary env in this suite
+  assert.equal((await call('POST', '/api/admin/projects', MEMBER, { slug: uid('vid'), title: 'Vid', category: 'AI Video', video_url: 'https://example.com/v.mp4' })).status, 403);
+  // Promote the demo member to leader: the same calls must now pass the gate.
+  await call('PATCH', '/api/admin/members/sample-member-1', ADMIN, { is_leader: true });
+  assert.equal((await call('POST', '/api/admin/upload/sign', MEMBER, { file_type: 'video', file_size: 10, file_name: 'x.mp4' })).status, 503);
+  const created = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('leader-vid'), title: 'Leader Vid', category: 'AI Video', video_url: 'https://example.com/v.mp4' });
+  assert.equal(created.status, 201); assert.equal(created.json.data.status, 'draft'); // leader still needs admin publish (unchanged rule)
+  await call('DELETE', `/api/admin/projects/${created.json.data.id}`, ADMIN);
+  await call('PATCH', '/api/admin/members/sample-member-1', ADMIN, { is_leader: false });
+  // Photos/resumes stay open to ordinary members.
+  assert.equal((await call('POST', '/api/admin/upload/sign', MEMBER, { file_type: 'image', file_size: 10, file_name: 'x.jpg' })).status, 503);
 });

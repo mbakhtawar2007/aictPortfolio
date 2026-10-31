@@ -24,6 +24,14 @@ async function slugTaken(kind, slug, excludeId) {
 adminRouter.get('/members', requireMemberOrAdmin(async (req, res) => {
   try { const all = await store.membersAll(); const list = req.actor.role === 'admin' ? all : all.filter((m) => m.id === req.actor.member_id); return ok(res, list); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); }
 }));
+// Video uploads (2026-10-31): only admins and the current Group Leader may
+// upload videos. The leader is a profile flag, not an account role, so the
+// actor's linked member record decides. Other members keep photo/resume uploads.
+async function canUploadVideo(actor) {
+  if (actor.role === 'admin') return true;
+  if (actor.role !== 'member' || !actor.member_id) return false;
+  try { const m = await store.memberById(actor.member_id); return m?.is_leader === true; } catch { return false; }
+}
 // Group leader (2026-10-29): exactly one member profile may be the group
 // leader. Setting it on one profile clears it from every other profile.
 // Only admins reach this helper with is_leader=true — member requests
@@ -89,6 +97,7 @@ adminRouter.post('/projects', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(projectSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
   // BUG-20: a profile-less member must not create ambiguously owned content.
   if (req.actor.role === 'member' && !req.actor.member_id) return fail(res, 403, 'forbidden', 'Create your team profile first, then add projects.');
+  if (req.actor.role === 'member' && (p.data.video_url || p.data.category === 'AI Video') && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
   // Audit fix 2026-10-29: member-created projects are drafts until an admin
   // publishes them (previously a member could POST status: 'published').
   if (req.actor.role === 'member') p.data.status = 'draft';
@@ -113,6 +122,7 @@ adminRouter.patch('/projects/:id', requireMemberOrAdmin(async (req, res) => {
     // list when editing an assigned project; only admins publish/unpublish
     // or change who is assigned.
     if (req.actor.role === 'member') { delete p.data.status; delete p.data.member_ids; delete p.data.project_members; }
+    if (req.actor.role === 'member' && (p.data.video_url || p.data.category === 'AI Video') && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
     if (p.data.slug && await slugTaken('projects', p.data.slug, req.params.id)) return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.');
     // BUG-12: year: null on PATCH deletes the field; other omitted fields
     // are untouched (partial schema + merge), so clearing year cannot
@@ -160,6 +170,7 @@ adminRouter.patch('/settings', requireAdmin(async (req, res) => {
 }));
 adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(uploadSignSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
+  if (p.data.file_type === 'video' && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return fail(res, 503, 'upload_unavailable', 'File uploads are not configured.');
   const ext = p.data.file_name.split('.').pop()?.toLowerCase() || '';
@@ -198,6 +209,7 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
   const body = req.body || {};
   const publicId = typeof body.public_id === 'string' ? body.public_id : '';
   const expected = body.file_type === 'video' ? 'video' : body.file_type === 'pdf' ? 'pdf' : 'image';
+  if (expected === 'video' && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
   if (!publicId.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be verified.');
   if (req.actor.role !== 'admin' && !publicId.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can verify only your own uploads.');
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;

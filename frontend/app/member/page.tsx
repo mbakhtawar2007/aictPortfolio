@@ -52,6 +52,7 @@ export default function MemberPage() {
 
   async function upload(e: React.FormEvent) {
     e.preventDefault(); if (!uploadFile) { push('error', 'Choose a file first.'); return; }
+    if (uploadType === 'video' && !myProfile?.is_leader) { push('error', 'Video uploads are limited to the Group Leader and admins.'); return; }
     if (uploadType === 'pdf' && uploadFile.name.split('.').pop()?.toLowerCase() !== 'pdf') { push('error', 'Resumes must be PDF files.'); return; }
     if (uploadType === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Images must be jpg, png, webp or avif.'); return; }
     if (uploadType === 'video' && !['mp4', 'webm'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Videos must be MP4 or WebM.'); return; }
@@ -103,7 +104,8 @@ export default function MemberPage() {
 
     <section className="form-section"><h2>My photos, files & videos</h2>
       <form onSubmit={upload}>
-        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option><option value="video">Video (MP4/WebM, max 50 MB)</option></select></label>
+        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option>{myProfile?.is_leader ? <option value="video">Video (MP4/WebM, max 50 MB)</option> : null}</select></label>
+        {!myProfile?.is_leader && <p className="muted">Video uploads are limited to the Group Leader and admins — photos and resumes are still open to you.</p>}
         <label>File<input key={uploadKey} type="file" accept={uploadType === 'video' ? 'video/mp4,video/webm' : uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
         <label>Title<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="e.g. Team at the tech fest" maxLength={120} /></label>
         <label>Description<textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} placeholder="A short description (optional)" maxLength={500} rows={3} /></label>

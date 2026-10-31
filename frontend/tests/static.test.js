@@ -384,3 +384,11 @@ test('apiGet retries transient network failures silently', () => {
   assert.match(api, /attempt/);
   assert.match(api, /setTimeout/);
 });
+
+test('member uploads: Video option only for the Group Leader (2026-10-31)', () => {
+  const member = read('app/member/page.tsx');
+  assert.match(member, /myProfile\?\.\is_leader \? <option value="video"/);
+  assert.match(member, /Video uploads are limited to the Group Leader and admins/);
+  // Admin uploads stay unrestricted.
+  assert.match(read('app/admin/page.tsx'), /<option value="video">Video \(MP4\/WebM, max 50 MB\)<\/option>/);
+});

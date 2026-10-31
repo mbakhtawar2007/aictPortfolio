@@ -8,6 +8,9 @@ import { audit } from './audit.js';
 const DEMO_USERS = {
   'demo-admin-token': { uid: 'demo-admin', email: 'demo-admin@example.local', role: 'admin', account_status: 'active', member_id: '' },
   'demo-member-token': { uid: 'demo-member', email: 'demo-member@example.local', role: 'member', account_status: 'active', member_id: 'sample-member-1' },
+  // Unlinked member (2026-10-31): a member account with no team profile yet.
+  // Demo-only, like the other two tokens above; never accepted in production.
+  'demo-unlinked-token': { uid: 'demo-unlinked', email: 'demo-unlinked@example.local', role: 'member', account_status: 'active', member_id: '' },
 };
 export async function loadActor(req) {
   const h = req.headers.authorization || '';

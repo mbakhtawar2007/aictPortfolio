@@ -5,11 +5,13 @@ projects, achievements, contact, skills matrix, and a dashboard for
 admins and team members — all editable without a code change.
 
 Current state (2026-10-31, live): video uploads use a YouTube-style form
-(custom thumbnail, category, Public/Unlisted/Private visibility, tags,
-year); video uploads are limited to admins and the Group Leader, and the
-Leader's videos go live at once while other members' stay drafts; signed-in
-sessions refresh their Firebase token silently before the 1-hour expiry;
-public resumes open in a new tab instead of an embedded modal viewer.
+(custom thumbnail, category, Shorts/full-length format,
+Public/Unlisted/Private visibility, tags, year); video uploads are limited
+to admins and the Group Leader, and the Leader's videos go live at once
+while other members' stay drafts; signed-in sessions refresh their
+Firebase token silently before the 1-hour expiry; public resumes open in
+a new tab instead of an embedded modal viewer; account cards carry a Role
+control (other accounts only — your own card never offers one).
 
 ## Live sites
 
@@ -99,9 +101,12 @@ public-page-linked forms where applicable.
 - **Team accounts:** the sign-in accounts. See "Accounts" below.
 - **Messages:** admin-only inbox — mark read/unread, delete,
   reply by `mailto:` link.
-- **Photos & files:** Cloudinary media library; uploads are signed
+- **Uploads:** the YouTube-style video form (see "Video uploads"
+  below) plus the Cloudinary media library; uploads are signed
   by the backend after auth + role checks (503 fail-closed when
-  Cloudinary is not configured). Copy a URL into a member/project
+  Cloudinary is not configured). Every upload card has Edit
+  (title/description via media metadata) and Delete (admin: any
+  upload; member: own uploads only). Copy a URL into a member/project
   form.
 - **History:** audit log (who changed what, when) and earlier
   versions (snapshots taken on every member/project/achievement
@@ -126,7 +131,9 @@ A member **never sees the admin page**. Their own page only shows:
   its URL, edit an upload's title/description. Video uploads are limited
   to the Group Leader and admins: the Video option is hidden for other
   members. A Group Leader's video project goes live at once; any other
-  member's video project is a draft until an admin publishes it.
+  member's video project is a draft until an admin publishes it. The
+  video form also asks for format (Shorts/full-length), visibility,
+  tags, category and year.
 
 Members cannot see other members' accounts, the messages inbox,
 site settings, or history. The backend already filters the members,
@@ -201,6 +208,104 @@ The login page has a **Forgot password?** button: enter the email,
 and Firebase sends a reset link to that address. This is also how
 a member changes a password an admin set for them.
 
+### Changing someone's role
+
+Each account card (except your own) has a **Role** dropdown: Admin
+or Team member. Changing someone *to* Admin asks for confirmation
+first, like the invite form does; demoting to Team member applies
+immediately. Your own card never offers it, because the server
+refuses self role, status and password changes (the self-change ban
+exists so an admin cannot accidentally lock themselves out — only
+linking your own profile is allowed for your own card). Role changes
+take effect on the very next request: the backend loads the role
+from Firestore on every request instead of trusting anything in the
+token, so there is no stale-token window after a demotion or a
+promotion.
+
+## Sessions — silent token refresh
+
+Firebase ID tokens last about an hour and are stored in the browser
+as `aict_admin_token` (localStorage), sent as a Bearer token on
+every API call. A long dashboard session used to die with 401s at
+the hour mark. `frontend/components/TokenRefresher.tsx`, mounted in
+the root layout, fixes that without ever asking for a password
+again: it watches Firebase Auth state, and for a signed-in user it
+forces a fresh token with `getIdToken(true)` once on detection and
+then every 50 minutes (inside the 1-hour lifetime). A failed refresh
+keeps the old token and retries on the next tick. It no-ops entirely
+when Firebase is not configured (local demo mode). Signing out
+clears the token and sends the browser to `/login`.
+
+## Video uploads — the YouTube-style form
+
+Uploading a video (admin Uploads, or member Uploads for the Group
+Leader) creates a project card automatically. The form asks for:
+
+- **Title** — blank means the file name, tidied up, is used.
+- **Description** — becomes the card tagline (first 500 characters)
+  and the full project description (up to 10000).
+- **Video file** — MP4/WebM, max 50 MB, direct to Cloudinary after
+  a backend-signed upload; the server then verifies the asset
+  (wrong type/size is destroyed, not kept).
+- **Custom thumbnail** — optional image; it wins as the card cover,
+  otherwise the video's first frame is derived
+  (`lib/videoThumb.ts`: `so_0,f_jpg,w_800` on the Cloudinary URL).
+- **Category** — AI Video (default), AI Tool, Website, Other. The
+  site has no playlists; categories are the grouping.
+- **Format** — Full-length video (default) or Shorts. This is the
+  uploader's choice, not auto-detected from the file; it is stored
+  as `video_format` (`full`/`short`, legacy projects read as full),
+  shown as a Shorts badge on project cards and as Format on the
+  detail page, and editable later in the project form for video
+  projects.
+- **Visibility** — Public (in lists + detail), Unlisted (detail
+  only via direct link), Private (never public, forced to draft).
+- **Tags** — comma-separated, shown as chips on the detail page.
+- **Year** — optional, 2000–2100.
+- **Storyline & plot** (→ `case_study`, up to 20000), **Characters**
+  (comma-separated), **Technology** (→ `tech_stack`), and **Team &
+  group members** (admin: checkboxes; member: own profile only).
+
+Rules that always apply, whatever the form says:
+
+- Only admins and the current Group Leader may upload videos. The
+  gate is enforced at upload sign, upload verify, and project
+  create/patch — pasting a video URL into a project form cannot
+  bypass it (403).
+- Status: an admin's video project is published at once; the Group
+  Leader's is published at once; any other member's is a draft
+  until an admin publishes it; Private is always a draft.
+  Member achievements are always drafts, whatever the uploader.
+- Slugs: the video title is slugified, and a taken slug retries
+  with `-2`…`-5` and then a timestamp suffix.
+- The upload itself is never rolled back if card creation fails:
+  the video stays in Uploads and the error says to create the card
+  by hand with its URL.
+
+## Resumes — signed proxy + new-tab view
+
+Public resumes are never served from a raw Cloudinary URL. The
+detail page links to `GET /api/members/:slug/resume`, which only
+answers for published profiles with a public resume (anything else
+404s): it looks the asset up with Cloudinary credentials, learns
+its real delivery type and version, and 302-redirects to a signed
+Cloudinary URL (inline by default; `?download=1` adds an attachment
+flag with a `Name-CV` filename — Cloudinary flag syntax splits on
+`.`, so the `.pdf` extension must never be part of the flag value).
+**View resume opens that URL in a new full tab**; there is no
+embedded modal viewer anymore. Two durable lessons live here:
+
+- An `<embed>`/viewer source origin must be allowed in the CSP
+  `object-src` (not just `frame-src`), and when the source goes
+  through a proxy, the *proxy* origin must be allowed too — the
+  blank-resume bug of 2026-10-31 was exactly the Vercel proxy
+  origin missing from `object-src`.
+- Cloudinary Console → Settings → Security → "PDF and ZIP files
+  delivery: Allow delivery of PDF and ZIP files" must be checked,
+  or even correctly signed PDF delivery returns 401 "deny or ACL
+  failure". Raw-file public IDs must also carry the `.pdf`
+  extension (the sign step appends it) or verification 404s.
+
 ## Run locally
 
 ```bash
@@ -231,8 +336,11 @@ These tokens are rejected unless `DEMO_MODE=true`.
 
 Public (no auth, published content only):
 `GET /api/health`, `GET /api/site`, `GET /api/members`,
-`GET /api/members/:slug`, `GET /api/projects`,
-`GET /api/projects/:slug`, `GET /api/achievements`,
+`GET /api/members/:slug`, `GET /api/members/:slug/resume`
+(published + public resume only, signed-URL redirect),
+`GET /api/projects`, `GET /api/projects/:slug`,
+`GET /api/achievements`, `GET /api/invite/validate`,
+`POST /api/invite/accept` (token + password only),
 `POST /api/contact` (Zod-validated, rate-limited, honeypot).
 
 Admin/member (Bearer Firebase ID token, every request):
@@ -245,11 +353,18 @@ Admin/member (Bearer Firebase ID token, every request):
 `POST /api/admin/upload/sign`, `GET /api/admin/media`,
 `GET/PATCH/DELETE /api/admin/messages/:id` (admin only),
 `GET /api/admin/audit`, `GET /api/admin/revisions`,
-`POST /api/admin/revisions/:id/restore` (admin only),
+`POST /api/admin/revisions/:id/restore` (admin only).
+Project fields the API accepts include `visibility`
+(public/unlisted/private), `tags`, `video_format` (full/short),
+`year`, `characters`, `case_study`, `tech_stack`, `category`,
+`cover_url`, `video_url`, `status` (draft/published).
 `GET /api/admin/users`, `POST /api/admin/users/invite-link`,
 `GET /api/admin/users/invite-links`,
 `POST /api/admin/users/invite-links/:id/revoke`,
-`PATCH /api/admin/users/:id`,
+`PATCH /api/admin/users/:id` (role / account_status / member_id;
+self role or status changes are refused, self member_id changes
+are allowed),
+`POST /api/admin/upload/sign`, `POST /api/admin/upload/verify`,
 `POST /api/admin/users/:id/set-password`,
 `POST /api/admin/users/:id/resend-invite`,
 `POST /api/admin/users/:id/revoke-invite`,
@@ -303,7 +418,8 @@ one line), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
 (no trailing slash). Invite emails: `GMAIL_USER` +
 `GMAIL_APP_PASSWORD` (Gmail SMTP first; a Gmail App Password, not the
 account password, pasted without spaces). Optional: `RESEND_API_KEY` +
-`CONTACT_NOTIFY_EMAIL` (fallback if Gmail is not configured).
+`CONTACT_NOTIFY_EMAIL` (fallback if Gmail is not configured). `PUBLIC_SITE_URL` sets the
+base used for invitation links (defaults to the Netlify site URL).
 Never set `DEMO_MODE=true` in production. Never commit a `.env` file.
 
 Netlify (frontend, build time): `NEXT_PUBLIC_API_URL=https://aict-portfolio.vercel.app/api`,
@@ -340,7 +456,14 @@ environment, so no Lighthouse score is claimed here).
   import), Vercel adapter (`api/index.js`), local-only server
   (`src/server.js`). Routes in `src/routes/admin.js` and
   `src/routes/public.js`; validation in `src/validate.js`;
-  role/activation logic in `src/auth.js`.
+  role/activation logic in `src/auth.js`; upload verification in
+  `src/verifyAsset.js` (format/size rules, rejected assets
+  destroyed); resume proxy URL building in `src/resumeUrl.js`.
+- `frontend/lib/` — `api.ts` (token + fetch helpers), `upload.ts`
+  (direct Cloudinary upload via backend sign + server verify),
+  `videoProject.ts` (video upload → project card),
+  `videoThumb.ts` (derived first-frame thumbnails),
+  `frontend/components/TokenRefresher.tsx` (silent token refresh).
 - `firestore.rules` — deny-all by default.
 - `DEPLOYMENT.md` — the original hand-done setup steps. Where it
   disagrees with this README about publishing, this README is
@@ -352,15 +475,22 @@ environment, so no Lighthouse score is claimed here).
   member photo has been invented. Real content now exists live
   (6 published members as of 2026-10-31); more real members/projects
   are added only from owner-supplied content.
+- Role swap in progress: the sce admin account was created via
+  invite link on 2026-10-31; demoting the edu account to Team
+  member (via the new Role control, as sce) is still to be done by
+  the owner, after which edu signs in as a member and sce is the
+  sole admin.
 - Live Gmail invite send: configured 2026-10-31, still to be
   confirmed with a real test invite (see "Accounts").
-- Team accounts simplification: an example was requested by the
+- Team accounts simplification: an example was described to the
   owner (2026-10-31) and is pending their go-ahead; not built yet.
 - Owner's live tests still unreported: a video upload through the
-  YouTube-style form, and the new-tab resume view.
+  YouTube-style form (including a Shorts-format upload and its
+  badge), and the new-tab resume view.
 - Not run live (deliberately): contact-form submission, destructive
   CRUD, media-delete with a real asset, and a full invited-member
-  invite-accept → login → deactivation end-to-end run.
+  deactivation end-to-end run (invite-accept → login itself was
+  proven live by the sce admin creation).
 
 ## Testing
 
@@ -369,15 +499,16 @@ Run these from the project directories. All tests use local demo mode only
 Cloudinary asset is touched.
 
 Backend (from `backend/`):
-- `npm test` — API regression suite (`tests/api.test.js`): 33 pass
-  (2026-10-31, incl. leader-live, visibility, invite-link and
-  resume-proxy tests).
+- `npm test` — API regression suite (`tests/api.test.js`): 34 pass
+  (2026-10-31, incl. leader-live, visibility, video-format,
+  invite-link and resume-proxy tests).
 - `npm run lint` — `node --check` over every backend source file.
 - `npm run build` — there is no backend build step; the Vercel adapter is
   `api/index.js` (syntax-checked by lint).
 
 Frontend (from `frontend/`):
-- `npm test` — static regression checks (`tests/static.test.js`): 42 pass.
+- `npm test` — static regression checks (`tests/static.test.js`): 44 pass
+  (incl. token-refresh, role-control and video-format checks).
 - `npm run typecheck` — `tsc --noEmit`.
 - `npm run build` — Next.js production build (17 static pages).
 

@@ -9,12 +9,11 @@ export const metadata: Metadata = {
   title: 'TechHive',
   description: 'TechHive: who we are, what we build, and what we have achieved.',
   icons: {
-    icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico' },
-    ],
-    shortcut: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
+    // SVG only: the repo snapshot push cannot carry binary files, and the
+    // file API stores base64 text literally, so no binary ICO/PNG is
+    // shipped. Modern browsers use this SVG tab icon.
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
   },
 };
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('aict_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(localStorage.getItem('aict_reduce')==='true'){document.documentElement.setAttribute('data-reduce','true');}}catch(e){}})();`;

@@ -336,7 +336,7 @@ test('video upload form asks for storyline, characters, technology and team (202
 
 test('own account link: users tab says role/status are refused but own profile linking is allowed (2026-10-31)', () => {
   const admin = read('app/admin/page.tsx');
-  assert.match(admin, /cannot change your own role, status or password/, 'users tab note must match the new backend rule (password controls are hidden on your own card too)');
+  assert.match(admin, /Your own role, status and password cannot be changed here/, 'users tab note must match the self-change rule');
   assert.ok(!/cannot change your own account from this page/.test(admin), 'old blanket self-change note must be gone');
   assert.match(admin, /Profile linked to \$\{next\.full_name\}/, 'Save link message must name the newly selected profile, not the old one');
 });
@@ -399,7 +399,7 @@ test('member uploads: Video option only for the Group Leader (2026-10-31)', () =
   assert.match(member, /myProfile\?\.\is_leader \? <option value="video"/);
   assert.match(member, /Video uploads are limited to the Group Leader and admins/);
   // Admin uploads stay unrestricted.
-  assert.match(read('app/admin/page.tsx'), /<option value="video">Video \(MP4\/WebM, max 50 MB\)<\/option>/);
+  assert.match(read('app/admin/page.tsx'), /<option value="video">Video \(MP4\/WebM, max 100 MB\)<\/option>/);
 });
 
 test('YouTube-like video upload form (2026-10-31)', () => {
@@ -437,8 +437,8 @@ test('silent token refresh: refresher mints a fresh Firebase token before the 1h
 
 test('account cards expose a role control for other accounts, never for your own (2026-10-31)', () => {
   const admin = read('app/admin/page.tsx');
-  assert.match(admin, /<label>Role<select/, 'account cards must offer a Role select (backend PATCH already supports role)');
-  assert.match(admin, /u\.id === meUid \? null : \(<label>Role/, 'your own card must not offer a role change (server refuses self role changes)');
+  assert.match(admin, /u\.id !== meUid && \(<label>Role<select/, 'account cards must offer a Role select for other accounts (backend PATCH already supports role)');
+  assert.ok(!/u\.id === meUid && \(<label>Role/.test(admin), 'your own card must not offer a role change (server refuses self role changes)');
   assert.match(admin, /Grant admin to this account/, 'granting admin must ask for confirmation, like the invite form');
 });
 
@@ -495,7 +495,7 @@ test('audit: apiGet distinguishes an upstream HTML error from a network failure 
 test('audit: uploads have a timeout and a cancel control (FE-10)', () => {
   for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
     const src = read(f);
-    assert.match(src, /xhr\.timeout = 120000/, f + ' upload XHR must time out');
+    assert.match(src, /xhr\.timeout = uploadType === 'video' \? 0 : 120000/, f + ' upload XHR must time out for small files but not for large videos');
     assert.match(src, /Cancel upload/, f + ' upload must offer a cancel button');
   }
   assert.match(read('lib/upload.ts'), /ontimeout/, 'direct upload helper must time out too');
@@ -503,7 +503,7 @@ test('audit: uploads have a timeout and a cancel control (FE-10)', () => {
 test('audit: ConfirmDialog labels match the action (FE-09) and own card hides password controls (FE-07)', () => {
   const admin = read('app/admin/page.tsx');
   assert.match(admin, /confirmLabel=\{confirmUserAction\.kind/, 'user-action confirm dialog must label itself by action');
-  assert.match(admin, /u\.id === meUid \? null : \(<><label>Set \/ reset password/, 'your own card must not show password fields');
+  assert.match(admin, /u\.id === meUid \? <p className="muted">This is your account\.<\/p> : \(<><label>Set \/ reset password/, 'your own card must not show password fields');
   assert.match(admin, /u\.id !== meUid && u\.account_status === 'active'/, 'your own card must not show Deactivate');
 });
 test('audit: forms strip privilege fields and clamp skill levels (FE-06)', () => {
@@ -565,4 +565,39 @@ test('UI/UX audit (2026-10-31): reduced-motion, mobile menu trap, page titles, i
   assert.match(read('styles/globals.css'), /\.nav \{ display: flex; flex-wrap: wrap;/, 'nav must wrap instead of overflowing at ~800px');
   assert.match(read('app/team/[slug]/detail.tsx'), /document\.title = `\$\{member\.full_name\} \| TechHive`/, 'member detail must set a specific title');
   assert.match(read('app/projects/[slug]/detail.tsx'), /document\.title = `\$\{project\.title\} \| TechHive`/, 'project detail must set a specific title');
+});
+
+test('video upload cap (2026-10-31): 100 MB free-plan ceiling, not 50 MB, with no 2-minute video timeout', () => {
+  const sign = read('../backend/src/routes/admin.js');
+  assert.match(sign, /file_type === 'video' \? 100 \* 1024 \* 1024/, 'sign cap must be 100 MB for video');
+  const verify = read('../backend/src/verifyAsset.js');
+  assert.match(verify, /expected === 'video' \? 100 \* 1024 \* 1024/, 'verify cap must be 100 MB for video');
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const src = read(f);
+    assert.match(src, /100 \* 1024 \* 1024/, f + ' must allow 100 MB videos');
+    assert.match(src, /xhr\.timeout = uploadType === 'video' \? 0 : 120000/, f + ' must not time out a large video after 2 minutes');
+    assert.ok(!src.includes('max 50 MB'), f + ' must not still advertise the old 50 MB video cap');
+  }
+});
+
+test('Team accounts simplification + admin lazy-load (2026-10-31)', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.match(admin, /expandedUser/, 'account cards must collapse details behind a Manage toggle');
+  assert.match(admin, /aria-expanded=\{expanded\}/, 'Manage toggle must expose expanded state');
+  assert.match(admin, /onChange=\{\(e\) => \{ const value = e\.target\.value; setLinkDraft/, 'profile-link dropdown must auto-save on change (no separate Save link button)');
+  assert.ok(!/Save link/.test(admin), 'the old Save link button must be gone');
+  assert.match(admin, /pendingLinks\.filter\(\(l\) => !l\.used && !l\.revoked\)\.length > 0 \|\| linksError/, 'pending invitation links section must hide when empty');
+  assert.match(admin, /Send setup email again/, 'resend action must use a plain label');
+  assert.match(admin, /Yes, cancel invitation/, 'revoke confirm must use a plain label');
+  assert.match(admin, /autoComplete="off"/, 'invite name/email must carry autofill guards');
+  assert.match(admin, /autoComplete="new-password"/, 'account password fields must carry autofill guards');
+  assert.match(admin, /reload\(true\)/, 'first admin load must fetch only the visible tabs');
+  assert.match(admin, /loadSection/, 'hidden-tab data must load on demand when its tab opens');
+  assert.ok(!/apiGet<ContactMessage\[\]>\('\/admin\/messages', true\)/.test(admin.split('if (!coreOnly)')[0]), 'first load must not fetch messages');
+});
+
+test('admin nav (2026-10-31): Projects tab brought back so admins can link YouTube videos', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.match(admin, /VISIBLE_TAB_IDS: Tab\[\] = \['overview', 'members', 'users', 'media', 'projects'\]/, 'Projects must be a visible admin tab');
+  assert.match(admin, /tab === 'projects'/, 'Projects panel must exist for the tab');
 });

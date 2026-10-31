@@ -638,3 +638,15 @@ test('CSP allows YouTube embeds (2026-10-31): a frame-src without youtube render
   assert.match(toml, /frame-src 'self' https:\/\/www\.youtube\.com https:\/\/www\.youtube-nocookie\.com/, 'frame-src must allow both YouTube embed origins');
   assert.match(toml, /object-src 'self'/, 'object-src must stay self-only (resumes open in a new tab)');
 });
+
+test('hydration (2026-10-31): theme/reduce toggles must not read localStorage during first render (React #418)', () => {
+  const layout = read('components/layout.tsx');
+  assert.ok(!/useState<string>\(\(\) => readTheme\(\)\)/.test(layout), 'ThemeToggle must not initialise from localStorage during render');
+  assert.ok(!/useState<boolean>\(\(\) => readReduce\(\)\)/.test(layout), 'ReduceToggle must not initialise from localStorage during render');
+  assert.match(layout, /useState<string>\('light'\)/, 'ThemeToggle must start from the server value');
+  assert.match(layout, /useEffect\(\(\) => \{ const stored = window\.localStorage\.getItem\('aict_theme'\)/, 'stored theme must sync in useEffect after hydration');
+});
+test('shorts player height (2026-10-31): tall 9:16 frame must be capped so it does not fill the screen', () => {
+  const detail = read('app/projects/[slug]/detail.tsx');
+  assert.match(detail, /maxWidth: p\.video_format === 'short' \? 'min\(100%, 300px, 35vh\)'/, 'shorts frame width must cap height at ~533px and ~62vh');
+});

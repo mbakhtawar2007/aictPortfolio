@@ -7,16 +7,23 @@ import { focusables } from './ui';
 import type { SiteSettings } from '../lib/types';
 import { safeSrc } from '../lib/safeUrl';
 
-function readTheme(): string { if (typeof window === 'undefined') return 'light'; return window.localStorage.getItem('aict_theme') || 'dark'; }
-function readReduce(): boolean { if (typeof window === 'undefined') return false; return window.localStorage.getItem('aict_reduce') === 'true'; }
-
+// Hydration rule (2026-10-31, React error #418): the first render must be
+// identical on server and client. Reading localStorage during render
+// broke this — the server always rendered 'light'/false while the client
+// rendered the stored 'dark'/true, so every page failed hydration.
+// Initial state is therefore the server value; stored preferences are
+// applied in useEffect, after hydration. The inline theme script in the
+// root layout already paints the right colours before hydration, so the
+// toggle icon is the only thing that syncs a beat later.
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<string>(() => readTheme());
+  const [theme, setTheme] = useState<string>('light');
+  useEffect(() => { const stored = window.localStorage.getItem('aict_theme') || 'dark'; setTheme(stored); document.documentElement.setAttribute('data-theme', stored); }, []);
   const toggle = () => { const next = theme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', next); window.localStorage.setItem('aict_theme', next); setTheme(next); };
   return (<button className="icon-btn" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title="Toggle theme" onClick={toggle}>{theme === 'dark' ? '☀' : '☾'}</button>);
 }
 export function ReduceToggle() {
-  const [reduce, setReduce] = useState<boolean>(() => readReduce());
+  const [reduce, setReduce] = useState<boolean>(false);
+  useEffect(() => { const stored = window.localStorage.getItem('aict_reduce') === 'true'; setReduce(stored); if (stored) document.documentElement.setAttribute('data-reduce', 'true'); }, []);
   const toggle = () => { const next = !reduce; document.documentElement.setAttribute('data-reduce', next ? 'true' : 'false'); window.localStorage.setItem('aict_reduce', next ? 'true' : 'false'); setReduce(next); applySmoothScrollPreference(); };
   return (<button className="btn secondary small" aria-pressed={reduce} onClick={toggle}>{reduce ? '✓ Effects reduced' : 'Reduce effects'}</button>);
 }

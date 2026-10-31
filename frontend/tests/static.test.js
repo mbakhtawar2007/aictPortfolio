@@ -512,3 +512,22 @@ test('audit: forms strip privilege fields and clamp skill levels (FE-06)', () =>
   assert.match(forms, /delete \(body as AnyObj\)\.is_leader/, 'forms must not send is_leader except through the admin leader checkbox');
   assert.match(forms, /Math\.max\(1, Math\.min\(100/, 'skill levels must be clamped to 1-100');
 });
+
+test('login redesign (2026-10-31): centred card, in-field show-password, role switch link, logic unchanged', () => {
+  const form = read('components/loginForm.tsx');
+  assert.match(form, /className="login-shell"/, 'login must render in the centred shell');
+  assert.match(form, /className="login-card"/, 'login must render as a card, not loose fields');
+  assert.match(form, /AICT Group/, 'login card must name the group');
+  assert.match(form, /login-show-btn/, 'show-password must be an in-field button, not a checkbox below the form');
+  assert.ok(!/type="checkbox"/.test(form), 'the old show-password checkbox must be gone');
+  assert.match(form, /switchHref/, 'login must link to the other login route (member <-> admin)');
+  assert.match(form, /Forgot password\?/, 'forgot password must stay');
+  assert.match(form, /There is no sign-up|no sign-up/, 'invite-only note must stay');
+  assert.match(form, /signInExisting/, 'sign-in logic must be unchanged');
+  assert.match(form, /friendlyAuthError/, 'safe error mapping must be unchanged');
+  assert.match(form, /role="alert"/, 'sign-in errors must be announced');
+  const css = read('styles/globals.css');
+  assert.match(css, /\.login-card/, 'login card styles must exist');
+  assert.match(css, /\.login-submit/, 'full-width submit styles must exist');
+  assert.ok(/\.login-shell \{[^}]*animation: none/.test(css) || /prefers-reduced-motion: reduce[\s\S]*\.login-shell \{ animation: none/.test(css), 'login entrance must respect reduced motion');
+});

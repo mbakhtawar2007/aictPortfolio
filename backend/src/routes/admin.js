@@ -186,8 +186,8 @@ adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
   if (p.data.file_type === 'pdf' && ext !== 'pdf') return fail(res, 400, 'validation_error', 'Resumes must be PDF files.');
   if (p.data.file_type === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext)) return fail(res, 400, 'validation_error', 'Images must be jpg, png, webp or avif.');
   if (p.data.file_type === 'video' && !['mp4', 'webm'].includes(ext)) return fail(res, 400, 'validation_error', 'Videos must be MP4 or WebM.');
-  const maxSignBytes = p.data.file_type === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
-  if (p.data.file_size > maxSignBytes) return fail(res, 400, 'validation_error', `File is larger than ${p.data.file_type === 'video' ? '50 MB' : '5 MB'}.`);
+  const maxSignBytes = p.data.file_type === 'video' ? 100 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (p.data.file_size > maxSignBytes) return fail(res, 400, 'validation_error', `File is larger than ${p.data.file_type === 'video' ? '100 MB' : '5 MB'}.`);
   try {
     const cloudinary = (await import('cloudinary')).v2;
     cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
@@ -247,7 +247,7 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
       let removed = false;
       try { const d = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }); removed = d && (d.result === 'ok' || d.result === 'not found'); } catch { /* removal best effort */ }
       const why = check.reason === 'size'
-        ? `file is larger than ${expected === 'video' ? '50 MB' : '5 MB'}`
+        ? `file is larger than ${expected === 'video' ? '100 MB' : '5 MB'}`
         : `file format is not allowed (Cloudinary reported format '${check.format || 'none'}', type '${check.resourceType || 'unknown'}')`;
       return fail(res, 400, 'validation_error', `Upload rejected: ${why}${removed ? ' (asset removed).' : ' (asset could not be removed — contact an admin).'}`);
     }

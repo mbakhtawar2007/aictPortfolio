@@ -250,7 +250,7 @@ Leader) creates a project card automatically. The form asks for:
 - **Title** — blank means the file name, tidied up, is used.
 - **Description** — becomes the card tagline (first 500 characters)
   and the full project description (up to 10000).
-- **Video file** — MP4/WebM, max 50 MB, direct to Cloudinary after
+- **Video file** — MP4/WebM, max 100 MB (Cloudinary free-plan ceiling), direct to Cloudinary after
   a backend-signed upload; the server then verifies the asset
   (wrong type/size is destroyed, not kept).
 - **Custom thumbnail** — optional image; it wins as the card cover,
@@ -410,7 +410,7 @@ traces, secrets, passwords, or invitation tokens.
   refresh tokens; reactivation re-enables it. See `SECURITY.md` for
   the full list and the residual risks that remain by design.
 - File uploads: PDF resumes max 5 MB, images max 5 MB, videos
-  (MP4/WebM) max 50 MB; server-generated Cloudinary paths, signed
+  (MP4/WebM) max 100 MB; server-generated Cloudinary paths, signed
   upload only after auth + role check, and only when Cloudinary env
   vars are present (otherwise 503, fail closed). Video uploads are
   additionally gated to admins and the Group Leader at sign, verify,

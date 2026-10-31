@@ -58,7 +58,7 @@ export default function MemberPage() {
     if (uploadType === 'pdf' && uploadFile.name.split('.').pop()?.toLowerCase() !== 'pdf') { push('error', 'Resumes must be PDF files.'); return; }
     if (uploadType === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Images must be jpg, png, webp or avif.'); return; }
     if (uploadType === 'video' && !['mp4', 'webm'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Videos must be MP4 or WebM.'); return; }
-    if (uploadFile.size > (uploadType === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 50 MB or smaller.' : 'File must be 5 MB or smaller.'); return; }
+    if (uploadFile.size > (uploadType === 'video' ? 100 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 100 MB or smaller (Cloudinary free-plan limit).' : 'File must be 5 MB or smaller.'); return; }
     if (uploadType === 'video' && uploadYear.trim() !== '') { const y = Number(uploadYear); if (!Number.isInteger(y) || y < 2000 || y > 2100) { push('error', 'Year must be between 2000 and 2100.'); return; } }
     setUploadBusy(true); setUploadUrl('');
     const sign = await apiSend('/admin/upload/sign', 'POST', { file_type: uploadType, file_size: uploadFile.size, file_name: uploadFile.name }, true);
@@ -67,7 +67,7 @@ export default function MemberPage() {
     const form = new FormData();
     form.append('file', uploadFile); form.append('api_key', String(d.api_key)); form.append('timestamp', String(d.timestamp)); form.append('public_id', String(d.public_id)); form.append('signature', String(d.signature));
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
-    const xhr = new XMLHttpRequest(); uploadXhrRef.current = xhr; xhr.timeout = 120000;
+    const xhr = new XMLHttpRequest(); uploadXhrRef.current = xhr; xhr.timeout = uploadType === 'video' ? 0 : 120000;
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };
     xhr.ontimeout = () => { uploadXhrRef.current = null; setUploadBusy(false); push('error', 'Upload timed out after 2 minutes. Check your connection and try again, or use a smaller file.'); };
     xhr.onabort = () => { uploadXhrRef.current = null; setUploadBusy(false); };
@@ -109,7 +109,7 @@ export default function MemberPage() {
 
     <section className="form-section"><h2>My photos, files & videos</h2>
       <form onSubmit={upload}>
-        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option>{myProfile?.is_leader ? <option value="video">Video (MP4/WebM, max 50 MB)</option> : null}</select></label>
+        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option>{myProfile?.is_leader ? <option value="video">Video (MP4/WebM, max 100 MB)</option> : null}</select></label>
         {!myProfile?.is_leader && <p className="muted">Video uploads are limited to the Group Leader and admins — photos and resumes are still open to you.</p>}
         <label>File<input key={uploadKey} type="file" accept={uploadType === 'video' ? 'video/mp4,video/webm' : uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
         <label>Title<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="e.g. Team at the tech fest" maxLength={120} /></label>

@@ -31,8 +31,10 @@
 # a blanket allow. connect-src covers the Vercel API, Firebase Auth and
 # direct Cloudinary uploads (2026-10-30: uploads failed until
 # api.cloudinary.com was added); style-src/font-src cover Google Fonts;
-# frame-src/object-src are 'self' only: resumes open in a new tab
-# (2026-10-31), so no embed origin is needed any more.
+# frame-src allows YouTube embeds (2026-10-31: without these origins the
+# embedded player renders as a blank white box — CSP blocks the frame
+# before YouTube ever loads). object-src stays 'self' only: resumes open
+# in a new tab (2026-10-31), so no embed origin is needed there.
 [[headers]]
   for = "/*"
   [headers.values]
@@ -41,4 +43,4 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https://aict-portfolio.vercel.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://api.cloudinary.com; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'none'; frame-src 'self'; object-src 'self'; base-uri 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https://aict-portfolio.vercel.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://api.cloudinary.com; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'none'; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; object-src 'self'; base-uri 'self'"

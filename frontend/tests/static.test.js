@@ -369,12 +369,13 @@ test('public resume viewer goes through the signed backend proxy, not the raw Cl
   assert.match(detail, /href=\{resumeUrl\} target="_blank"/, 'View resume must open the PDF in a new full tab');
   // Audit hardening: the resume modal embed is gone (new-tab view
   // since 2026-10-31), so frame/object-src no longer need Cloudinary
-  // or Vercel origins — 'self' is enough, and anything framed from
-  // elsewhere is now blocked by default.
+  // or Vercel origins. frame-src now allows ONLY the YouTube embed
+  // origins (2026-10-31 player fix); anything else framed from
+  // elsewhere is still blocked by default.
   const toml = read('netlify.toml');
-  assert.match(toml, /frame-src 'self'/, 'CSP frame-src must be self-only now that no resume embed exists');
+  assert.ok(!/res\.cloudinary\.com/.test(toml.split('frame-src')[1].split(';')[0]), 'stale Cloudinary frame origin must be gone');
+  assert.ok(!/aict-portfolio\.vercel\.app/.test(toml.split('frame-src')[1].split(';')[0]), 'stale Vercel frame origin must be gone');
   assert.match(toml, /object-src 'self'/, 'CSP object-src must be self-only now that no resume embed exists');
-  assert.ok(!/frame-src 'self' https/.test(toml), 'stale Cloudinary/Vercel frame origins must be gone');
   assert.ok(!/object-src 'self' https/.test(toml), 'stale Cloudinary/Vercel object origins must be gone');
 });
 
@@ -630,4 +631,10 @@ test('project detail storyline (2026-10-31): pasted \\n / \\. escapes render as 
   assert.match(detail, /storyParas/, 'storyline must split into paragraphs');
   assert.match(detail, /whiteSpace: 'pre-line'/, 'paragraphs must preserve single line breaks');
   assert.ok(!/\{p\.case_study\}/.test(detail.replace(/storyParas/g, '')), 'case_study must not render raw anymore');
+});
+
+test('CSP allows YouTube embeds (2026-10-31): a frame-src without youtube renders the player as a blank white box', () => {
+  const toml = read('netlify.toml');
+  assert.match(toml, /frame-src 'self' https:\/\/www\.youtube\.com https:\/\/www\.youtube-nocookie\.com/, 'frame-src must allow both YouTube embed origins');
+  assert.match(toml, /object-src 'self'/, 'object-src must stay self-only (resumes open in a new tab)');
 });

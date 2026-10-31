@@ -53,6 +53,11 @@ export const projectSchema = z.object({
   // detail, unlisted = detail only via direct link, private = never public
   // (forced to draft on save). Missing = public, so legacy projects stay listed.
   visibility: z.enum(['public', 'unlisted', 'private']).optional().default('public'),
+  // Video format (YouTube-style, 2026-10-31): 'short' = a Shorts-style
+  // short vertical video, 'full' = a regular full-length video. This is
+  // the uploader's choice, not auto-detected from the file. Missing =
+  // 'full', so legacy projects stay full-length.
+  video_format: z.enum(['full', 'short']).optional().default('full'),
   tags: z.array(z.string().trim().max(100)).optional().default([]),
   tech_stack: z.array(z.string()).optional().default([]), tools_used: z.array(z.string()).optional().default([]),
   characters: z.array(z.string().trim().max(200)).optional().default([]),

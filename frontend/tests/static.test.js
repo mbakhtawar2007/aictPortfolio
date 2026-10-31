@@ -436,3 +436,20 @@ test('account cards expose a role control for other accounts, never for your own
   assert.match(admin, /u\.id === meUid \? null : \(<label>Role/, 'your own card must not offer a role change (server refuses self role changes)');
   assert.match(admin, /Grant admin to this account/, 'granting admin must ask for confirmation, like the invite form');
 });
+
+test('video format: upload forms offer Shorts vs full-length, helper sends it, card and detail show it (2026-10-31)', () => {
+  const admin = read('app/admin/page.tsx');
+  const member = read('app/member/page.tsx');
+  assert.match(admin, /name="admin-upload-format"/, 'admin upload form must offer a format choice');
+  assert.match(member, /name="member-upload-format"/, 'member upload form must offer a format choice');
+  assert.match(admin, /uploadVideoFormat === 'short'/, 'admin form must track the Shorts choice');
+  assert.match(member, /uploadVideoFormat === 'short'/, 'member form must track the Shorts choice');
+  const helper = read('lib/videoProject.ts');
+  assert.match(helper, /video_format: input\.videoFormat \|\| 'full'/, 'video project creation must send the chosen format');
+  const card = read('app/projects/page.tsx');
+  assert.match(card, /video_format === 'short' && <span className="chip">Shorts<\/span>/, 'project cards must badge Shorts videos');
+  const detail = read('app/projects/[slug]/detail.tsx');
+  assert.match(detail, /video_format === 'short' \? ' · Shorts'/, 'detail page must show the format');
+  const forms = read('components/adminForms.tsx');
+  assert.match(forms, /label="Format"/, 'project edit form must allow changing the format for video projects');
+});

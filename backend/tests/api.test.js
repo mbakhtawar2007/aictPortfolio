@@ -407,3 +407,12 @@ test('leader member project goes live at once; non-leader member stays draft; le
   const draft = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('member-draft'), title: 'Member Draft', status: 'published' });
   assert.equal(draft.json.data.status, 'draft');
 });
+
+test('project video_format: short persists, full is the default, bogus value 400s (2026-10-31)', async () => {
+  const short = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('short-vid'), title: 'Short Vid', category: 'AI Video', video_url: 'https://example.com/s.mp4', video_format: 'short', status: 'published' });
+  assert.equal(short.status, 201); assert.equal(short.json.data.video_format, 'short');
+  const def = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('full-vid'), title: 'Full Vid', category: 'AI Video', video_url: 'https://example.com/f.mp4', status: 'published' });
+  assert.equal(def.json.data.video_format, 'full');
+  const bad = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('bad-fmt'), title: 'Bad Fmt', video_format: 'vertical', status: 'published' });
+  assert.equal(bad.status, 400);
+});

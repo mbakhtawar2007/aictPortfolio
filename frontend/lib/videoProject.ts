@@ -56,6 +56,7 @@ export async function createVideoProject(input: {
   techStack?: string[];
   memberIds?: string[];
   category?: string;
+  videoFormat?: string;
   visibility?: string;
   tags?: string[];
   year?: number;
@@ -77,6 +78,7 @@ export async function createVideoProject(input: {
       // A custom thumbnail wins; otherwise the video's first frame is used.
       cover_url: input.coverUrl || videoThumbnailUrl(input.videoUrl) || '',
       visibility: input.visibility || 'public',
+      video_format: input.videoFormat || 'full',
       tags: (input.tags || []).map((t) => t.trim().slice(0, 100)).filter(Boolean),
       ...(input.year !== undefined ? { year: input.year } : {}),
       // Optional details asked for in the Uploads form (2026-10-31): they

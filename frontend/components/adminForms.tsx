@@ -185,6 +185,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
     <Text label="Tools used (comma-separated)" value={csv(f.tools_used)} onChange={(v) => set('tools_used', v.split(',').map((s) => s.trim()).filter(Boolean))} />
     <Text label="Cover URL" value={errText(f.cover_url)} onChange={(v) => set('cover_url', v)} />
     <Text label="Video URL" value={errText(f.video_url)} onChange={(v) => set('video_url', v)} />
+    {errText(f.video_url) ? (<><Select label="Format" value={errText(f.video_format) === 'short' ? 'Shorts' : 'Full-length video'} options={['Full-length video', 'Shorts']} onChange={(v) => set('video_format', v === 'Shorts' ? 'short' : 'full')} /><p className="muted">Shorts are short vertical videos, shown with a Shorts badge; full-length is a regular video.</p></>) : null}
     <Text label="Repo URL" value={errText(f.repo_url)} onChange={(v) => set('repo_url', v)} />
     <Text label="Live URL" value={errText(f.live_url)} onChange={(v) => set('live_url', v)} />
     <Text label="Year (leave blank to clear)" type="number" value={f.year === null || f.year === undefined ? '' : String(f.year)} onChange={(v) => set('year', v)} />

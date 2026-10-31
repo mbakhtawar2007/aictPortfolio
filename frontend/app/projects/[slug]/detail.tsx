@@ -39,7 +39,7 @@ export default function ProjectDetail({ slug }: { slug: string }) {
   return (<div>
     {p.video_url ? (/\.(mp4|webm)(\?|$)/i.test(p.video_url) ? (<video controls preload="metadata" aria-label={`${p.title} video`} poster={thumb || undefined} src={p.video_url} style={{ width: '100%', maxHeight: 420, borderRadius: 20 }} />) : (<p><a className="btn" href={p.video_url} target="_blank" rel="noreferrer">Watch video</a></p>)) : (p.cover_url ? <img className="blur-up" src={p.cover_url} alt={`${p.title} cover`} tabIndex={0} role="button" aria-label={`Open ${p.title} cover`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLb(0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLb(0); } }} /> : null)}
     <h1>{p.title}</h1>
-    <p className="muted">{p.category} {p.year ? `· ${p.year}` : ''} {p.featured ? '· Featured' : ''}</p>
+    <p className="muted">{p.category} {p.year ? `· ${p.year}` : ''} {p.featured ? '· Featured' : ''}{p.video_format === 'short' ? ' · Shorts' : p.video_format === 'full' ? ' · Full-length video' : ''}</p>
     <p>{p.tagline}</p><p>{p.description}</p>
     {p.video_url && thumb && !p.cover_url && <p className="muted">Thumbnail: first frame of the uploaded video.</p>}
     {p.category === 'AI Video' ? (<><h2>Storyline &amp; plot</h2>{p.case_study ? <p>{p.case_study}</p> : <p className="muted">No storyline published yet.</p>}</>) : (p.case_study ? <><h2>Case study</h2><p>{p.case_study}</p></> : null)}

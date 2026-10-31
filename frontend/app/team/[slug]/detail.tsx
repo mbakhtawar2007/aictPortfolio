@@ -3,11 +3,11 @@ import { useEffect, useState } from 'react';
 import { apiGet, API_URL } from '../../../lib/api';
 import type { Member, Project, Achievement } from '../../../lib/types';
 import { fmtDate } from '../../shared';
-import { Modal, CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
+import { CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function MemberDetail({ slug }: { slug: string }) {
   const [m, setM] = useState<Member | null>(null); const [projects, setProjects] = useState<Project[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]); const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [resumeOpen, setResumeOpen] = useState(false);
+  const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
   const [lightbox, setLightbox] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
@@ -52,15 +52,11 @@ export default function MemberDetail({ slug }: { slug: string }) {
     <h2>Projects</h2><div className="grid">{projects.map((p) => <div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p></div>)}{!projects.length && <p className="muted">No projects linked yet.</p>}</div>
     <h2>Achievements &amp; Certifications</h2><div className="grid">{achievements.map((a) => <div className="card card-hover" key={a.id}><h3>{a.title}</h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p>{a.credential_url && <p><a href={a.credential_url} target="_blank" rel="noreferrer">Verify credential</a></p>}</div>)}{!achievements.length && <p className="muted">No achievements published for this member.</p>}</div>
     <h2>Resume / CV</h2>
-    {m.resume_path ? (<div><p><button className="btn" onClick={() => setResumeOpen(true)}>View resume</button>{' '}<a className="btn secondary" href={resumeDownloadUrl}>Download {friendlyCv}</a></p><p className="muted">The resume is public only when the member has marked it public.</p></div>) : <p className="muted">No public resume for this member.</p>}
+    {m.resume_path ? (<div><p><a className="btn" href={resumeUrl} target="_blank" rel="noreferrer">View resume</a>{' '}<a className="btn secondary" href={resumeDownloadUrl}>Download {friendlyCv}</a></p><p className="muted">The resume is public only when the member has marked it public.</p></div>) : <p className="muted">No public resume for this member.</p>}
     <h2>Contact</h2><p>{(m.links || []).map((l) => <a key={l.url} href={l.url} target="_blank" rel="noreferrer" style={{ marginRight: 12 }}>{l.label || l.type}</a>)}{(m.links || []).length === 0 && <span className="muted">No public links yet.</span>}</p>
     {m.contact_email ? <p><span>{m.contact_email}</span> <CopyButton text={m.contact_email} label="Copy email" /></p> : null}
     <nav aria-label="Member navigation"><p>{prev ? <a href={`/team/${prev.slug}`}>← Previous: {prev.full_name}</a> : ''} {next ? <a href={`/team/${next.slug}`}>Next: {next.full_name} →</a> : ''}</p></nav>
     <p><a href="/team">← Back to team</a></p>
-    {resumeOpen && m.resume_path && (<Modal title={`${m.full_name} — Resume`} onClose={() => setResumeOpen(false)}>
-      <embed src={resumeUrl} type="application/pdf" style={{ width: '100%', height: '60vh' }} />
-      <p><a href={resumeUrl} target="_blank" rel="noreferrer">Open in new tab</a> (fallback if the embedded viewer does not load) · <a href={resumeDownloadUrl}>Download</a></p>
-    </Modal>)}
     {lightbox && (<Lightbox label="Photo preview" src={lightbox} alt={`${m.full_name} photo`} onClose={() => setLightbox(null)} />)}
   </div>);
 }

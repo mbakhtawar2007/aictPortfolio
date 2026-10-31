@@ -365,6 +365,8 @@ test('public resume viewer goes through the signed backend proxy, not the raw Cl
   assert.match(detail, /API_URL\}\/members\/\$\{m\.slug\}\/resume/, 'detail page must build the proxy resume URL');
   assert.ok(!/src=\{m\.resume_path\}/.test(detail), 'embed must not point at the raw Cloudinary URL (CSP frame block + 401)');
   assert.ok(!/href=\{m\.resume_path\}/.test(detail), 'resume links must not point at the raw Cloudinary URL');
+  assert.ok(!/<embed/.test(detail), 'resume must not be embedded in a modal viewer (opens in a new tab instead)');
+  assert.match(detail, /href=\{resumeUrl\} target="_blank"/, 'View resume must open the PDF in a new full tab');
   const toml = read('netlify.toml');
   assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com/, 'CSP must allow framing Cloudinary for the signed redirect');
   assert.match(toml, /object-src 'self' https:\/\/res\.cloudinary\.com https:\/\/aict-portfolio\.vercel\.app/, 'CSP object-src must allow the Vercel resume proxy origin or every <embed> is blocked');

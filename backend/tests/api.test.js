@@ -12,6 +12,7 @@ import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { checkVerifyAsset } from '../src/verifyAsset.js';
 import { store } from '../src/store.js';
+import { resumePublicIdFromUrl, signedResumeUrl } from '../src/resumeUrl.js';
 
 let server; let base;
 before(async () => {
@@ -327,4 +328,25 @@ test('admin can link their OWN account to a profile, but cannot change own role/
   assert.equal(unlinked.status, 200);
   assert.equal(unlinked.json.data.member_id, '');
   await store.deleteRole('demo-admin');
+});
+
+test('resume proxy: public-id parsing and signed URL shape (2026-10-31)', async () => {
+  assert.equal(resumePublicIdFromUrl('https://res.cloudinary.com/ddbi7moq/raw/upload/v1793442487/aict-portfolio/resumes/uid-123.pdf'), 'aict-portfolio/resumes/uid-123.pdf');
+  assert.equal(resumePublicIdFromUrl('https://res.cloudinary.com/ddbi7moq/raw/upload/aict-portfolio/resumes/uid-123.pdf'), 'aict-portfolio/resumes/uid-123.pdf');
+  assert.equal(resumePublicIdFromUrl('https://example.com/not-cloudinary.pdf'), null);
+  assert.equal(resumePublicIdFromUrl('not a url'), null);
+  const { v2: cloudinary } = await import('cloudinary');
+  cloudinary.config({ cloud_name: 'testcloud', api_key: 'testkey', api_secret: 'testsecret', secure: true });
+  const signed = signedResumeUrl(cloudinary, 'aict-portfolio/resumes/uid-123.pdf', 'authenticated', false, 'Muhammad Bakhtawar', 1793442487);
+  assert.match(signed, /^https:\/\/res\.cloudinary\.com\/testcloud\/raw\/authenticated\/s--[^/]+\/v1793442487\/aict-portfolio\/resumes\/uid-123\.pdf(\?.*)?$/);
+  const dl = signedResumeUrl(cloudinary, 'aict-portfolio/resumes/uid-123.pdf', 'upload', true, 'Muhammad Bakhtawar');
+  assert.match(dl, /fl_attachment:Muhammad-Bakhtawar-CV\.pdf/);
+});
+test('resume proxy: unknown member 404s; demo member without Cloudinary env falls back to stored URL (2026-10-31)', async () => {
+  assert.equal((await call('GET', '/api/members/no-such-member/resume')).status, 404);
+  await store.saveMember('test-resume-member', { slug: 'test-resume-member', full_name: 'Test Resume', status: 'published', resume_path: 'https://res.cloudinary.com/test/raw/upload/v1/aict-portfolio/resumes/test-1.pdf', resume_is_public: true });
+  const r = await fetch(base + '/api/members/test-resume-member/resume', { redirect: 'manual' });
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.get('location'), 'https://res.cloudinary.com/test/raw/upload/v1/aict-portfolio/resumes/test-1.pdf');
+  await store.deleteMember('test-resume-member');
 });

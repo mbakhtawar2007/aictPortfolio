@@ -12,6 +12,26 @@ publicRouter.get('/health', (req, res) => ok(res, { status: 'ok', mode: isFireba
 publicRouter.get('/site', async (req, res) => { try { const s = await store.site(); return ok(res, s); } catch { return fail(res, 503, 'unavailable', 'Site settings are temporarily unavailable.'); } });
 publicRouter.get('/members', async (req, res) => { try { return ok(res, await store.membersPublished()); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); } });
 publicRouter.get('/members/:slug', async (req, res) => { try { const m = await store.memberBySlug(req.params.slug); if (!m) return fail(res, 404, 'not_found', 'Member not found.'); return ok(res, m); } catch { return fail(res, 503, 'unavailable', 'Member is temporarily unavailable.'); } });
+publicRouter.get('/members/:slug/resume', async (req, res) => {
+  try {
+    const m = await store.memberBySlug(req.params.slug);
+    if (!m || !m.resume_path || !m.resume_is_public) return fail(res, 404, 'not_found', 'Resume not found.');
+    const { resumePublicIdFromUrl, signedResumeUrl } = await import('../resumeUrl.js');
+    const publicId = resumePublicIdFromUrl(m.resume_path);
+    const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
+    // No Cloudinary credentials (local/demo): fall back to the stored URL,
+    // exactly the old behaviour, rather than failing a resume that might
+    // still deliver.
+    if (!publicId || !publicId.startsWith('aict-portfolio/resumes/') || !CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return res.redirect(m.resume_path);
+    const cloudinary = (await import('cloudinary')).v2;
+    cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
+    let asset;
+    try { asset = await cloudinary.api.resource(publicId, { resource_type: 'raw' }); }
+    catch { return fail(res, 404, 'not_found', 'Resume could not be found.'); }
+    const signed = signedResumeUrl(cloudinary, publicId, asset.type, req.query.download === '1', m.full_name, asset.version);
+    return res.redirect(signed);
+  } catch { return fail(res, 503, 'unavailable', 'Resume is temporarily unavailable.'); }
+});
 publicRouter.get('/projects', async (req, res) => { try { return ok(res, await store.projectsPublished()); } catch { return fail(res, 503, 'unavailable', 'Projects are temporarily unavailable.'); } });
 publicRouter.get('/projects/:slug', async (req, res) => { try { const p = await store.projectBySlug(req.params.slug); if (!p) return fail(res, 404, 'not_found', 'Project not found.'); return ok(res, p); } catch { return fail(res, 503, 'unavailable', 'Project is temporarily unavailable.'); } });
 publicRouter.get('/achievements', async (req, res) => { try { return ok(res, await store.achievementsPublished()); } catch { return fail(res, 503, 'unavailable', 'Achievements are temporarily unavailable.'); } });

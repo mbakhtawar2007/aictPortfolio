@@ -8,7 +8,7 @@
     "dev": "node src/server.js",
     "test": "node --test tests/api.test.js",
     "test:integration": "node --test tests/api.test.js",
-    "lint": "node --check src/app.js && node --check src/auth.js && node --check src/firebase.js && node --check src/store.js && node --check src/validate.js && node --check src/audit.js && node --check src/rateLimit.js && node --check src/routes/public.js && node --check src/routes/admin.js && node --check src/verifyAsset.js && node --check api/index.js"
+    "lint": "node --check src/app.js && node --check src/auth.js && node --check src/firebase.js && node --check src/store.js && node --check src/validate.js && node --check src/audit.js && node --check src/rateLimit.js && node --check src/routes/public.js && node --check src/routes/admin.js && node --check src/verifyAsset.js && node --check src/resumeUrl.js && node --check api/index.js"
   },
   "dependencies": {
     "cloudinary": "^2.7.0",

@@ -359,3 +359,12 @@ test('footer does not render on admin pages, still renders elsewhere (2026-10-31
   assert.match(layout, /return null;/, 'Footer must return nothing on admin routes');
   assert.match(layout, /© \{year\} \{siteName\}/, 'Footer content must still exist for public pages');
 });
+
+test('public resume viewer goes through the signed backend proxy, not the raw Cloudinary URL (2026-10-31)', () => {
+  const detail = read('app/team/[slug]/detail.tsx');
+  assert.match(detail, /API_URL\}\/members\/\$\{m\.slug\}\/resume/, 'detail page must build the proxy resume URL');
+  assert.ok(!/src=\{m\.resume_path\}/.test(detail), 'embed must not point at the raw Cloudinary URL (CSP frame block + 401)');
+  assert.ok(!/href=\{m\.resume_path\}/.test(detail), 'resume links must not point at the raw Cloudinary URL');
+  const toml = read('netlify.toml');
+  assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com/, 'CSP must allow framing Cloudinary for the signed redirect');
+});

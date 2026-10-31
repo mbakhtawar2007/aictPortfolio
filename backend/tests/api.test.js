@@ -340,7 +340,7 @@ test('resume proxy: public-id parsing and signed URL shape (2026-10-31)', async 
   const signed = signedResumeUrl(cloudinary, 'aict-portfolio/resumes/uid-123.pdf', 'authenticated', false, 'Muhammad Bakhtawar', 1793442487);
   assert.match(signed, /^https:\/\/res\.cloudinary\.com\/testcloud\/raw\/authenticated\/s--[^/]+\/v1793442487\/aict-portfolio\/resumes\/uid-123\.pdf(\?.*)?$/);
   const dl = signedResumeUrl(cloudinary, 'aict-portfolio/resumes/uid-123.pdf', 'upload', true, 'Muhammad Bakhtawar');
-  assert.match(dl, /fl_attachment:Muhammad-Bakhtawar-CV\.pdf/);
+  assert.match(dl, /fl_attachment:Muhammad-Bakhtawar-CV(?!\.)/);
 });
 test('resume proxy: unknown member 404s; demo member without Cloudinary env falls back to stored URL (2026-10-31)', async () => {
   assert.equal((await call('GET', '/api/members/no-such-member/resume')).status, 404);

@@ -29,7 +29,7 @@ export function signedResumeUrl(cloudinary, publicId, type, download, fullName, 
   if (version) opts.version = version;
   if (download) {
     const safe = String(fullName || '').replace(/[^a-zA-Z]+/g, '-').replace(/^-+|-+$/g, '') || 'Resume';
-    opts.flags = [`attachment:${safe}-CV.pdf`];
+    opts.flags = [`attachment:${safe}-CV`];
   }
   return cloudinary.url(publicId, opts);
 }

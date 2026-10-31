@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../../lib/api';
 import type { Member } from '../../lib/types';
-import { Empty, ErrorBox } from '../shared';
+import { Empty } from '../shared';
 import { SkeletonGrid } from '../../components/ui';
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
@@ -13,7 +13,7 @@ export default function TeamPage() {
   const filtered = members.filter((m) => (role === 'All' || m.role_title === role) && (`${m.full_name} ${(m.skills || []).map((s) => s.name).join(' ')}`.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => Number(b.is_leader || false) - Number(a.is_leader || false));
   if (loading) return <SkeletonGrid />;
   return (<div><h1>Team</h1>
-    {error ? (<div><ErrorBox message={error} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty list — the request failed.</p></div>) : null}
+    {error ? (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty list — the request failed.</p></div>) : null}
     {!error && (<><label>Search by name or skill<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. React" /></label>
     <label>Filter by role<select value={role} onChange={(e) => setRole(e.target.value)}>{roles.map((r) => <option key={r}>{r}</option>)}</select></label>
     <p className="muted">{filtered.length} of {members.length} members {(q || role !== 'All') && <button className="btn secondary small" onClick={() => { setQ(''); setRole('All'); }}>Clear filters</button>}</p>

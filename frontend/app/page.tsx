@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
 import type { Member, Project, Achievement, SiteSettings } from '../lib/types';
-import { Empty, ErrorBox, Section } from './shared';
+import { Empty, Section } from './shared';
 import { SkeletonGrid } from '../components/ui';
 import ExploreStudio from '../components/ExploreStudio';
 import { scrollToSection } from '../lib/scroll3d';
@@ -48,15 +48,15 @@ export default function Home() {
       <p><button type="button" className="btn secondary hero-scroll-prompt" onClick={() => scrollToSection('#about')} aria-label="Scroll down to the about section">↓ Scroll to explore</button></p>
     </div>
     {site?.hero_video_url && (<div style={{ marginTop: 24 }}><video controls src={site.hero_video_url} style={{ width: '100%', maxHeight: 420, objectFit: 'cover', borderRadius: 20 }} /></div>)}
-    {siteError && (<div><ErrorBox message={siteError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">Site settings could not be loaded, so generic headings are shown. This is a failed request, not an empty site.</p></div>)}
+    {siteError && (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">Site settings could not be loaded, so generic headings are shown. This is a failed request, not an empty site.</p></div>)}
     <div id="about"><Section title="About"><p>{site?.mission || 'The group has not published a mission yet.'}</p><p className="muted">{site?.about || ''}</p></Section></div>
     <Section title="What We Do"><div className="grid">
       {[['AI Video Creation', 'Short AI videos, showreels and visual stories made by the team.'], ['AI Projects', 'Practical AI tools and experiments, built and documented by members.'], ['Web Development', 'Websites and web apps, from design to a live, working product.'], ['Creative Storytelling', 'Ideas turned into stories told through video, visuals and words.']].map(([t, d]) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">{d}</p></div>))}
     </div></Section>
-    <Section title="Meet the Team">{membersError ? (<div><ErrorBox message={membersError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="grid">
+    <Section title="Meet the Team">{membersError ? (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="grid">
       {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}>{m.photo_url?.startsWith('http') ? <img className="avatar-img" src={m.photo_url} alt="" /> : <span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}<h3><a href={`/team/${m.slug}`}>{m.full_name}</a></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
     </div><p><a href="/team">See the full team →</a></p></>)}</Section>
-    <Section title="Featured Projects">{projectsError ? (<div><ErrorBox message={projectsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
+    <Section title="Featured Projects">{projectsError ? (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
       {featured.length ? featured.map((p) => { const ft = projectThumbnail(p); return (<div className="card card-hover" key={p.id}>{ft && <a href={`/projects/${p.slug}`}><img className="project-thumb" src={ft} alt="" loading="lazy" style={{ marginBottom: 12 }} /></a>}<h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>); }) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
     </div>)}</Section>
     <ExploreStudio />
@@ -66,7 +66,7 @@ export default function Home() {
       <div className="card">{achievementsError ? <span className="stat">—</span> : <Counter value={achievements.length} />}<p className="muted">Certificates &amp; achievements{achievementsError ? ' (unavailable)' : ''}</p></div>
       <div className="card">{projectsError ? <span className="stat">—</span> : <Counter value={videoCount} />}<p className="muted">AI videos{projectsError ? ' (unavailable)' : ''}</p></div>
     </div></Section>
-    <Section title="Achievements highlights">{achievementsError ? (<div><ErrorBox message={achievementsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The achievement list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
+    <Section title="Achievements highlights">{achievementsError ? (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The achievement list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
       {achievements.filter((a) => a.featured).map((a) => (<div className="card card-hover" key={a.id}><h3>{a.title}</h3><p className="muted">{a.issuer} · {a.date}</p><p>{a.description}</p></div>))}
       {!achievements.filter((a) => a.featured).length && <Empty text="No featured achievements yet." />}
     </div>)}</Section>

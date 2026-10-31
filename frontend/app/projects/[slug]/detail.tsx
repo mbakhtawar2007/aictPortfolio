@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import type { Project, Member } from '../../../lib/types';
-import { ErrorBox } from '../../shared';
 import { SkeletonGrid, Lightbox } from '../../../components/ui';
 import { projectThumbnail } from '../../../lib/videoThumb';
 export default function ProjectDetail({ slug }: { slug: string }) {
@@ -32,7 +31,7 @@ export default function ProjectDetail({ slug }: { slug: string }) {
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
   if (loading) return <SkeletonGrid />;
-  if (error || !p) return (<div><ErrorBox message={error || 'Project not found.'} /><p><a href="/projects">← Back to projects</a></p></div>);
+  if (error || !p) return (<div><p className="muted">{/not found/i.test(error) || !error ? 'Project not found.' : 'This project could not be loaded right now.'}</p><p><a href="/projects">← Back to projects</a></p></div>);
   const contributors = members.filter((x) => (p.member_ids || []).includes(x.id));
   const roleOf = (id: string) => (p.project_members || []).find((x) => x.member_id === id)?.role_in_project || '';
   const related = all.filter((x) => x.id !== p.id && x.category === p.category).slice(0, 3);

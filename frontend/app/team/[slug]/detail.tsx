@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet, API_URL } from '../../../lib/api';
 import type { Member, Project, Achievement } from '../../../lib/types';
-import { ErrorBox, fmtDate } from '../../shared';
+import { fmtDate } from '../../shared';
 import { Modal, CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function MemberDetail({ slug }: { slug: string }) {
   const [m, setM] = useState<Member | null>(null); const [projects, setProjects] = useState<Project[]>([]);
@@ -31,7 +31,7 @@ export default function MemberDetail({ slug }: { slug: string }) {
     })();
   }, [slug]);
   if (loading) return <SkeletonGrid />;
-  if (error || !m) return (<div><ErrorBox message={error || 'Member not found.'} /><p><a href="/team">← Back to team</a></p></div>);
+  if (error || !m) return (<div><p className="muted">{/not found/i.test(error) || !error ? 'Member not found.' : 'This profile could not be loaded right now.'}</p><p><a href="/team">← Back to team</a></p></div>);
   const idx = allMembers.findIndex((x) => x.id === m.id);
   const prev = idx > 0 ? allMembers[idx - 1] : null; const next = idx >= 0 && idx < allMembers.length - 1 ? allMembers[idx + 1] : null;
   const friendlyCv = `${m.full_name.replace(/[^a-zA-Z]+/g, '-')}-CV.pdf`;

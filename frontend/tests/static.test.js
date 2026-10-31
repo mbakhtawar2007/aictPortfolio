@@ -368,3 +368,19 @@ test('public resume viewer goes through the signed backend proxy, not the raw Cl
   const toml = read('netlify.toml');
   assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com/, 'CSP must allow framing Cloudinary for the signed redirect');
 });
+
+test('public pages never show a red error box or the technical server message (2026-10-31)', () => {
+  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'app/skills/page.tsx', 'app/team/[slug]/detail.tsx', 'app/projects/[slug]/detail.tsx']) {
+    const src = read(f);
+    assert.ok(!/ErrorBox/.test(src), f + ' must not render ErrorBox');
+    assert.ok(!/Could not reach/.test(src), f + ' must not show the technical server message');
+  }
+  // Detail pages still distinguish a genuinely unknown slug, as plain text.
+  assert.match(read('app/team/[slug]/detail.tsx'), /Member not found/);
+  assert.match(read('app/projects/[slug]/detail.tsx'), /Project not found/);
+});
+test('apiGet retries transient network failures silently', () => {
+  const api = read('lib/api.ts');
+  assert.match(api, /attempt/);
+  assert.match(api, /setTimeout/);
+});

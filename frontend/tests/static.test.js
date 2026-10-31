@@ -351,3 +351,11 @@ test('upload cards have an Edit button that saves title/description via media/me
     assert.match(src, /maxLength=\{500\}/, f + ' description must keep the 500-char limit');
   }
 });
+
+test('footer does not render on admin pages, still renders elsewhere (2026-10-31)', () => {
+  const layout = read('components/layout.tsx');
+  assert.match(layout, /usePathname/, 'Footer must read the current route');
+  assert.match(layout, /pathname === '\/admin' \|\| pathname\.startsWith\('\/admin\/'\)/, 'Footer must hide on /admin and /admin/*');
+  assert.match(layout, /return null;/, 'Footer must return nothing on admin routes');
+  assert.match(layout, /© \{year\} \{siteName\}/, 'Footer content must still exist for public pages');
+});

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { apiGet } from '../lib/api';
 import type { SiteSettings } from '../lib/types';
 
@@ -61,6 +62,11 @@ export function BackToTop() {
   return (<button className="back-to-top" aria-label="Back to top" onClick={() => { const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.getAttribute('data-reduce') === 'true'; window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' }); }}>↑ Top</button>);
 }
 export function Footer() {
+  // Admin pages are a workspace, not a public page: no public footer with
+  // site links and the Reduce effects toggle (2026-10-31). This covers
+  // /admin and /admin/login; /member is left unchanged.
+  const pathname = usePathname() || '/';
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return null;
   const [siteName, setSiteName] = useState('AICT Group');
   useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error && r.data?.group_name) setSiteName(r.data.group_name); }); }, []);
   const year = new Date().getFullYear();

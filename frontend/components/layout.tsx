@@ -3,19 +3,18 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { apiGet } from '../lib/api';
 import type { SiteSettings } from '../lib/types';
+import { safeSrc } from '../lib/safeUrl';
 
 function readTheme(): string { if (typeof window === 'undefined') return 'light'; return window.localStorage.getItem('aict_theme') || 'dark'; }
 function readReduce(): boolean { if (typeof window === 'undefined') return false; return window.localStorage.getItem('aict_reduce') === 'true'; }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState('dark');
-  useEffect(() => { setTheme(readTheme()); }, []);
+  const [theme, setTheme] = useState<string>(() => readTheme());
   const toggle = () => { const next = theme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', next); window.localStorage.setItem('aict_theme', next); setTheme(next); };
   return (<button className="icon-btn" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title="Toggle theme" onClick={toggle}>{theme === 'dark' ? '☀' : '☾'}</button>);
 }
 export function ReduceToggle() {
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => { setReduce(readReduce()); }, []);
+  const [reduce, setReduce] = useState<boolean>(() => readReduce());
   const toggle = () => { const next = !reduce; document.documentElement.setAttribute('data-reduce', next ? 'true' : 'false'); window.localStorage.setItem('aict_reduce', next ? 'true' : 'false'); setReduce(next); };
   return (<button className="btn secondary small" aria-pressed={reduce} onClick={toggle}>{reduce ? '✓ Effects reduced' : 'Reduce effects'}</button>);
 }
@@ -41,7 +40,7 @@ export function Navbar() {
   return (<header className="site-header">
     <div className="progress-bar" style={{ width: `${progress}%` }} aria-hidden="true" />
     <nav className="nav" aria-label="Main navigation">
-      {site?.logo_url ? <a href="/"><img src={site.logo_url} alt={site.group_name || 'AICT Group'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'AICT'}</a>}
+      {safeSrc(site?.logo_url) ? <a href="/"><img src={safeSrc(site?.logo_url)} alt={site?.group_name || 'AICT Group'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'AICT'}</a>}
       <span className="nav-links">{links.map(([href, label]) => (<a key={href} href={href}>{label}</a>))}</span>
       <span className="nav-actions"><a className="btn secondary small nav-login" href="/admin/login">Admin login</a><a className="btn secondary small nav-login" href="/login">Member login</a><ThemeToggle />
         <button ref={burgerRef} className="icon-btn nav-burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen(true)}>☰</button></span>
@@ -66,10 +65,13 @@ export function Footer() {
   // site links and the Reduce effects toggle (2026-10-31). This covers
   // /admin and /admin/login; /member is left unchanged.
   const pathname = usePathname() || '/';
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) return null;
+  // Hooks first, early return after: the layout stays mounted while
+  // navigating, so a return before these hooks would change hook order
+  // when moving between /admin and a public page.
   const [siteName, setSiteName] = useState('AICT Group');
   useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error && r.data?.group_name) setSiteName(r.data.group_name); }); }, []);
   const year = new Date().getFullYear();
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return null;
   return (<footer>
     <p><strong>{siteName}</strong> — homepage, team profiles, projects and achievements.</p>
     <p><a href="/">Home</a> · <a href="/team">Team</a> · <a href="/projects">Projects</a> · <a href="/skills">Skills</a> · <a href="/contact">Contact</a></p>

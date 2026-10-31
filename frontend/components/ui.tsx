@@ -1,6 +1,7 @@
 'use client';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { safeSrc } from '../lib/safeUrl';
 
 export type Toast = { id: number; kind: 'success' | 'error'; text: string };
 export function Toasts({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: number) => void }) {
@@ -70,9 +71,9 @@ export function Tabs({ id, label, tabs, value, onChange }: { id: string; label: 
 
   </div>);
 }
-export function ConfirmDialog({ text, onConfirm, onCancel, busy }: { text: string; onConfirm: () => void; onCancel: () => void; busy?: boolean }) {
+export function ConfirmDialog({ text, onConfirm, onCancel, busy, confirmLabel }: { text: string; onConfirm: () => void; onCancel: () => void; busy?: boolean; confirmLabel?: string }) {
   return (<Modal title="Confirm" onClose={onCancel}><p>{text}</p>
-    <p><button className="btn danger" disabled={busy} onClick={onConfirm}>{busy ? 'Working…' : 'Yes, delete'}</button>{' '}
+    <p><button className="btn danger" disabled={busy} onClick={onConfirm}>{busy ? 'Working…' : (confirmLabel || 'Yes, delete')}</button>{' '}
     <button className="btn secondary" disabled={busy} onClick={onCancel}>Cancel</button></p></Modal>);
 }
 export function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
@@ -96,7 +97,7 @@ export function Lightbox({ label, src, alt, onClose, onPrev, onNext }: { label: 
   const ref = useRef<HTMLDivElement>(null);
   useDialogFocus(onClose, ref);
   return (<div className="lightbox" ref={ref} role="dialog" aria-modal="true" aria-label={label} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-    <img src={src} alt={alt} />
+    {safeSrc(src) && <img src={safeSrc(src)} alt={alt} />}
     <button className="icon-btn" style={{ top: 16, right: 16 }} aria-label="Close preview" onClick={onClose}>×</button>
     {onPrev && <button className="icon-btn" style={{ left: 16, top: '50%' }} aria-label="Previous image" onClick={(e) => { e.stopPropagation(); onPrev(); }}>‹</button>}
     {onNext && <button className="icon-btn" style={{ right: 16, top: '50%' }} aria-label="Next image" onClick={(e) => { e.stopPropagation(); onNext(); }}>›</button>}

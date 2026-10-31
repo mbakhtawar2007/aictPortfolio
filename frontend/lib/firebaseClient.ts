@@ -24,7 +24,7 @@ export function getFirebaseAuth(): Auth | null {
 export async function signInExisting(email: string, password: string): Promise<string> {
   const auth = getFirebaseAuth();
   if (!auth) throw new Error('Firebase is not configured. Set the NEXT_PUBLIC_FIREBASE_* variables at build time.');
-  const cred = await signInWithEmailAndPassword(auth, email, password);
+  const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
   return cred.user.getIdToken();
 }
 // Sends Firebase's own password-setup email to an EXISTING account.
@@ -34,5 +34,5 @@ export async function signInExisting(email: string, password: string): Promise<s
 export async function sendPasswordSetupEmail(email: string): Promise<void> {
   const auth = getFirebaseAuth();
   if (!auth) throw new Error('Firebase is not configured. Set the NEXT_PUBLIC_FIREBASE_* variables at build time.');
-  await sendPasswordResetEmail(auth, email);
+  await sendPasswordResetEmail(auth, email.trim());
 }

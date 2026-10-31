@@ -2,8 +2,9 @@
 import { useState } from 'react';
 import { apiSend } from '../lib/api';
 import { uploadDirectFile } from '../lib/upload';
+import { safeHref, safeSrc } from '../lib/safeUrl';
 import type { Member, Project, Achievement, SiteSettings } from '../lib/types';
-import { Field, Modal } from './ui';
+import { Field } from './ui';
 
 type AnyObj = Record<string, unknown>;
 function errText(v: unknown): string { return typeof v === 'string' ? v : ''; }
@@ -71,8 +72,9 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     if (!errText(f.full_name).trim()) errs.full_name = 'Full name is required.';
     if (f.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(errText(f.contact_email))) errs.contact_email = 'Enter a valid email, or leave it blank.';
     setErrors(errs); if (Object.keys(errs).length) return;
-    const body = { ...f, slug, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
-    if (!canSetLeader) delete (body as AnyObj).status;
+    const body = { ...f, slug, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name).map((sk) => ({ ...sk, level: typeof sk.level === 'number' ? Math.max(1, Math.min(100, sk.level)) : sk.level })), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
+    delete (body as AnyObj).id;
+    if (!canSetLeader) { delete (body as AnyObj).status; delete (body as AnyObj).is_leader; }
     await saveForm(initial?.id ? `/admin/members/${initial.id}` : '/admin/members', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
   if (isCreate && !showAll) return (<form onSubmit={submit}>
@@ -105,13 +107,13 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     <label className="field">Upload photo<input key={photoKey} type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void directUpload(file, 'photo'); }} /></label>
     {photoBusy && <p>Uploading… {photoProgress}%</p>}
     {photoError && <p className="error">{photoError}</p>}
-    {errText(f.photo_url).startsWith('http') && <p><img src={errText(f.photo_url)} alt="Profile photo preview" style={{ height: 64, borderRadius: 8 }} /></p>}
+    {safeSrc(f.photo_url) && <p><img src={safeSrc(f.photo_url)} alt="Profile photo preview" style={{ height: 64, borderRadius: 8 }} /></p>}
     <Text label="Cover URL" value={errText(f.cover_url)} onChange={(v) => set('cover_url', v)} />
     <Text label="Resume URL (PDF)" value={errText(f.resume_path)} onChange={(v) => set('resume_path', v)} placeholder="Paste a URL, or upload a resume below" />
     <label className="field">Upload resume (PDF)<input key={resumeKey} type="file" accept="application/pdf" disabled={resumeBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void directUpload(file, 'resume'); }} /></label>
     {resumeBusy && <p>Uploading… {resumeProgress}%</p>}
     {resumeError && <p className="error">{resumeError}</p>}
-    {errText(f.resume_path).startsWith('http') && <p><a href={errText(f.resume_path)} target="_blank" rel="noreferrer">View uploaded resume</a></p>}
+    {safeHref(f.resume_path) && <p><a href={safeHref(f.resume_path)} target="_blank" rel="noreferrer">View uploaded resume</a></p>}
     <Check label="Resume is public" value={Boolean(f.resume_is_public)} onChange={(v) => set('resume_is_public', v)} /></section>
     <section className="form-section"><h3>Contact</h3>
     <Text label="Contact email" type="email" value={errText(f.contact_email)} onChange={(v) => set('contact_email', v)} error={errors.contact_email} />
@@ -122,7 +124,7 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     <ListEditor title="Skills" items={(f.skills as AnyObj[]) || []} onChange={(v) => set('skills', v)} render={(it, setIt) => (<>
       <Text label="Skill name" value={errText(it.name)} onChange={(v) => setIt({ name: v })} />
       <Text label="Category" value={errText(it.category) || 'Technical'} onChange={(v) => setIt({ category: v })} />
-      <Text label="Level 1–100" type="number" value={String(it.level ?? 50)} onChange={(v) => setIt({ level: Number(v) || 50 })} /></>)} />
+      <Text label="Level 1–100" type="number" value={String(it.level ?? 50)} onChange={(v) => setIt({ level: Math.max(1, Math.min(100, Number(v) || 50)) })} /></>)} />
     <ListEditor title="Education" items={(f.education as AnyObj[]) || []} onChange={(v) => set('education', v)} render={(it, setIt) => (<>
       <Text label="Institution" value={errText(it.institution)} onChange={(v) => setIt({ institution: v })} />
       <Text label="Degree" value={errText(it.degree)} onChange={(v) => setIt({ degree: v })} />
@@ -162,11 +164,13 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
     e.preventDefault(); const errs: Record<string, string> = {};
     if (!errText(f.slug).trim()) errs.slug = 'Slug is required.';
     if (!errText(f.title).trim()) errs.title = 'Title is required.';
+    if (f.year !== '' && f.year !== null && f.year !== undefined && (!Number.isInteger(Number(f.year)) || Number(f.year) < 2000 || Number(f.year) > 2100)) errs.year = 'Year must be between 2000 and 2100.';
     setErrors(errs); if (Object.keys(errs).length) return;
     const pm = (f.project_members as AnyObj[]).filter((x) => x.member_id);
     // Blank year must be sent as null (not undefined, which JSON drops)
     // so the backend can delete the field instead of keeping the old year.
     const body = { ...f, year: (f.year === '' || f.year === null || f.year === undefined) ? null : Number(f.year), sort_order: Number(f.sort_order) || 0, member_ids: pm.map((x) => x.member_id), project_members: pm };
+    delete (body as AnyObj).id; delete (body as AnyObj).is_leader;
     if (!isAdmin) delete (body as AnyObj).status;
     await saveForm(initial?.id ? `/admin/projects/${initial.id}` : '/admin/projects', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
   };
@@ -188,7 +192,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
     {errText(f.video_url) ? (<><Select label="Format" value={errText(f.video_format) === 'short' ? 'Shorts' : 'Full-length video'} options={['Full-length video', 'Shorts']} onChange={(v) => set('video_format', v === 'Shorts' ? 'short' : 'full')} /><p className="muted">Shorts are short vertical videos, shown with a Shorts badge; full-length is a regular video.</p></>) : null}
     <Text label="Repo URL" value={errText(f.repo_url)} onChange={(v) => set('repo_url', v)} />
     <Text label="Live URL" value={errText(f.live_url)} onChange={(v) => set('live_url', v)} />
-    <Text label="Year (leave blank to clear)" type="number" value={f.year === null || f.year === undefined ? '' : String(f.year)} onChange={(v) => set('year', v)} />
+    <Text label="Year (leave blank to clear)" type="number" value={f.year === null || f.year === undefined ? '' : String(f.year)} onChange={(v) => set('year', v)} error={errors.year} />
     <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} /><p className="muted">Featured projects are highlighted on the homepage.</p>
     {isAdmin && <><Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
     <Select label="Visibility" value={errText(f.visibility) || 'public'} options={['public', 'unlisted', 'private']} onChange={(v) => set('visibility', v)} /><p className="muted">Public appears in Projects lists. Unlisted is hidden from lists but opens from its direct link. Private stays a draft and is never public.</p>
@@ -264,7 +268,4 @@ export function SettingsForm({ initial, onSaved, push }: { initial: Partial<Site
     <p><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button></p>
     <p className="muted">Saving stores this in the database. Visitors will see published changes on their next page load — no rebuild needed.</p>
   </form>);
-}
-export function FormModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (<Modal title={title} onClose={onClose}>{children}</Modal>);
 }

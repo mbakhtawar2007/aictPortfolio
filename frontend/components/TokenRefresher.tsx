@@ -17,7 +17,9 @@ export default function TokenRefresher() {
     let timer: ReturnType<typeof setInterval> | undefined;
     const unsub = onAuthStateChanged(auth, (user) => {
       if (timer) clearInterval(timer);
-      if (!user) return;
+      // Signed out (including via signOutSession): clear the stored
+      // token instead of leaving a stale one that could be reused.
+      if (!user) { window.localStorage.removeItem('aict_admin_token'); return; }
       const refresh = async () => {
         try {
           const token = await user.getIdToken(true);

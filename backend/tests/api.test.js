@@ -204,9 +204,13 @@ test('invite link: revoke kills the link, accept takes no role/email (no escalat
   assert.equal((await call('GET', `/api/invite/validate?token=${token}`)).status, 404);
   const created2 = await call('POST', '/api/admin/users/invite-link', ADMIN, { email: 'escalate@example.local', name: 'Esc', role: 'member' });
   const token2 = created2.json.data.invite_link.split('token=')[1];
-  // Even if the accept payload tries to smuggle a role, it is ignored: the
-  // endpoint schema has no role field, and the role comes from the invite.
-  const accepted = await call('POST', '/api/invite/accept', null, { token: token2, password: 'escpass123', role: 'admin', email: 'victim@x.com' });
+  // An accept payload that tries to smuggle a role/email is now
+  // rejected outright (strict schema, audit hardening): the role comes
+  // from the invite record only, and a rejected accept does not claim
+  // the token, so a clean accept still works afterwards.
+  const smuggled = await call('POST', '/api/invite/accept', null, { token: token2, password: 'escpass123', role: 'admin', email: 'victim@x.com' });
+  assert.equal(smuggled.status, 400);
+  const accepted = await call('POST', '/api/invite/accept', null, { token: token2, password: 'escpass123' });
   assert.equal(accepted.status, 200);
   const users = await call('GET', '/api/admin/users', ADMIN);
   const me = users.json.data.find((u) => u.email === 'escalate@example.local');
@@ -415,4 +419,97 @@ test('project video_format: short persists, full is the default, bogus value 400
   assert.equal(def.json.data.video_format, 'full');
   const bad = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('bad-fmt'), title: 'Bad Fmt', video_format: 'vertical', status: 'published' });
   assert.equal(bad.status, 400);
+});
+
+// ---- Audit hardening regressions (2026-10-31) ----
+
+test('audit: concurrent invite accepts — exactly one succeeds', async () => {
+  const created = await call('POST', '/api/admin/users/invite-link', ADMIN, { email: 'race@example.local', name: 'Race', role: 'member' });
+  assert.equal(created.status, 201);
+  const token = created.json.data.invite_link.split('token=')[1];
+  const [a, b] = await Promise.all([
+    call('POST', '/api/invite/accept', null, { token, password: 'racepass123' }),
+    call('POST', '/api/invite/accept', null, { token, password: 'racepass123' }),
+  ]);
+  const okCount = [a, b].filter((r) => r.status === 200).length;
+  assert.equal(okCount, 1);
+  assert.ok([a, b].some((r) => r.status === 404));
+});
+
+test('audit: demo tokens rejected and public content fails closed in deployed env', async () => {
+  const prev = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    assert.equal((await call('GET', '/api/admin/me', ADMIN)).status, 401);
+    assert.equal((await call('GET', '/api/members')).status, 503);
+  } finally {
+    if (prev === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prev;
+  }
+  // Restored: demo mode works again locally.
+  assert.equal((await call('GET', '/api/admin/me', ADMIN)).status, 200);
+});
+
+test('audit: javascript/data URLs rejected in photo, cover, logo and social fields', async () => {
+  assert.equal((await call('POST', '/api/admin/members', ADMIN, { slug: uid('badurl'), full_name: 'Bad', photo_url: 'javascript:alert(1)' })).status, 400);
+  assert.equal((await call('POST', '/api/admin/members', ADMIN, { slug: uid('badurl2'), full_name: 'Bad', cover_url: 'data:text/html,<script>' })).status, 400);
+  assert.equal((await call('PATCH', '/api/admin/settings', ADMIN, { group_name: 'AICT Group', logo_url: 'javascript:alert(1)' })).status, 400);
+  assert.equal((await call('PATCH', '/api/admin/settings', ADMIN, { group_name: 'AICT Group', social_links: { github: 'javascript:alert(1)' } })).status, 400);
+  const good = await call('POST', '/api/admin/members', ADMIN, { slug: uid('goodurl'), full_name: 'Good', photo_url: 'https://example.com/p.jpg', cover_url: '/logo.svg' });
+  assert.equal(good.status, 201);
+  await call('DELETE', `/api/admin/members/${good.json.data.id}`, ADMIN);
+});
+
+test('audit: member cannot set featured, sort_order or visibility on project PATCH', async () => {
+  const proj = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('priv'), title: 'Priv' });
+  const edited = await call('PATCH', `/api/admin/projects/${proj.json.data.id}`, MEMBER, { featured: true, sort_order: 99, visibility: 'unlisted', title: 'Priv2' });
+  assert.equal(edited.json.data.featured, false);
+  assert.equal(edited.json.data.sort_order, 0);
+  assert.equal(edited.json.data.visibility, 'public');
+  assert.equal(edited.json.data.title, 'Priv2');
+  await call('DELETE', `/api/admin/projects/${proj.json.data.id}`, ADMIN);
+});
+
+test('audit: profile link collision returns 409 for the second account', async () => {
+  await store.saveRole('audit-user-a', { role: 'member', account_status: 'active', email: 'a@example.local', member_id: '' });
+  await store.saveRole('audit-user-b', { role: 'member', account_status: 'active', email: 'b@example.local', member_id: '' });
+  try {
+    assert.equal((await call('PATCH', '/api/admin/users/audit-user-a', ADMIN, { member_id: 'sample-member-2' })).status, 200);
+    assert.equal((await call('PATCH', '/api/admin/users/audit-user-b', ADMIN, { member_id: 'sample-member-2' })).status, 409);
+  } finally {
+    await store.deleteRole('audit-user-a'); await store.deleteRole('audit-user-b');
+  }
+});
+
+test('audit: deletes of missing records return 404', async () => {
+  assert.equal((await call('DELETE', '/api/admin/members/nope-123', ADMIN)).status, 404);
+  assert.equal((await call('DELETE', '/api/admin/projects/nope-123', ADMIN)).status, 404);
+  assert.equal((await call('DELETE', '/api/admin/achievements/nope-123', ADMIN)).status, 404);
+  assert.equal((await call('DELETE', '/api/admin/messages/nope-123', ADMIN)).status, 404);
+});
+
+test('audit: upload owner parsing is exact, not a substring match', async () => {
+  const { assetOwnerUid, isOwnAsset } = await import('../src/ownership.js');
+  assert.equal(assetOwnerUid('aict-portfolio/images/demo-admin-1234567890'), 'demo-admin');
+  assert.equal(assetOwnerUid('aict-portfolio/resumes/demo-admin-1234567890.pdf'), 'demo-admin');
+  assert.equal(assetOwnerUid('aict-portfolio/images/demo-1234567890'), 'demo');
+  assert.equal(isOwnAsset({ role: 'member', uid: 'demo' }, 'aict-portfolio/images/demo-admin-123'), false);
+  assert.equal(isOwnAsset({ role: 'member', uid: 'demo-admin' }, 'aict-portfolio/images/demo-admin-123'), true);
+});
+
+test('audit: resume proxy never redirects to an external URL', async () => {
+  await store.saveMember('test-ext-resume', { slug: 'test-ext-resume', full_name: 'Ext Resume', status: 'published', resume_path: 'https://example.com/evil.pdf', resume_is_public: true });
+  try {
+    const r = await fetch(base + '/api/members/test-ext-resume/resume', { redirect: 'manual' });
+    assert.equal(r.status, 404);
+  } finally { await store.deleteMember('test-ext-resume'); }
+});
+
+test('audit: CORS origins are normalised (no trailing slash, no wildcard) and bad JSON is 400', async () => {
+  const { corsOrigins } = await import('../src/app.js');
+  const prev = process.env.CORS_ORIGIN;
+  process.env.CORS_ORIGIN = 'https://aictportfollio.netlify.app/,*,,';
+  try { assert.deepEqual(corsOrigins(), ['https://aictportfollio.netlify.app']); }
+  finally { if (prev === undefined) delete process.env.CORS_ORIGIN; else process.env.CORS_ORIGIN = prev; }
+  const res = await fetch(base + '/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' });
+  assert.equal(res.status, 400);
 });

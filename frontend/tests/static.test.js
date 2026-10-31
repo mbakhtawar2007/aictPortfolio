@@ -246,7 +246,7 @@ test('upload: browser never sends folder separately (2026-10-30 doubled-path ver
 test('member cards show the photo when photo_url exists, initials otherwise', () => {
   for (const f of ['app/team/page.tsx', 'app/page.tsx', 'app/admin/page.tsx']) {
     const page = read(f);
-    assert.ok(page.includes("m.photo_url?.startsWith('http')"), f + ' checks photo_url');
+    assert.ok(page.includes("m.photo_url?.startsWith('http')") || page.includes('safeSrc(m.photo_url)'), f + ' checks photo_url (direct http check or the audit safe-URL guard)');
     assert.ok(page.includes('className="avatar-img"'), f + ' renders the photo in the card');
     assert.ok(page.includes('className="avatar"'), f + ' keeps the initials fallback');
   }
@@ -336,7 +336,7 @@ test('video upload form asks for storyline, characters, technology and team (202
 
 test('own account link: users tab says role/status are refused but own profile linking is allowed (2026-10-31)', () => {
   const admin = read('app/admin/page.tsx');
-  assert.match(admin, /cannot change your own role or status/, 'users tab note must match the new backend rule');
+  assert.match(admin, /cannot change your own role, status or password/, 'users tab note must match the new backend rule (password controls are hidden on your own card too)');
   assert.ok(!/cannot change your own account from this page/.test(admin), 'old blanket self-change note must be gone');
   assert.match(admin, /Profile linked to \$\{next\.full_name\}/, 'Save link message must name the newly selected profile, not the old one');
 });
@@ -362,15 +362,20 @@ test('footer does not render on admin pages, still renders elsewhere (2026-10-31
 
 test('public resume viewer goes through the signed backend proxy, not the raw Cloudinary URL (2026-10-31)', () => {
   const detail = read('app/team/[slug]/detail.tsx');
-  assert.match(detail, /API_URL\}\/members\/\$\{m\.slug\}\/resume/, 'detail page must build the proxy resume URL');
+  assert.match(detail, /API_URL\}\/members\/\$\{encodeURIComponent\(m\.slug\)\}\/resume/, 'detail page must build the proxy resume URL with an encoded slug');
   assert.ok(!/src=\{m\.resume_path\}/.test(detail), 'embed must not point at the raw Cloudinary URL (CSP frame block + 401)');
   assert.ok(!/href=\{m\.resume_path\}/.test(detail), 'resume links must not point at the raw Cloudinary URL');
   assert.ok(!/<embed/.test(detail), 'resume must not be embedded in a modal viewer (opens in a new tab instead)');
   assert.match(detail, /href=\{resumeUrl\} target="_blank"/, 'View resume must open the PDF in a new full tab');
+  // Audit hardening: the resume modal embed is gone (new-tab view
+  // since 2026-10-31), so frame/object-src no longer need Cloudinary
+  // or Vercel origins — 'self' is enough, and anything framed from
+  // elsewhere is now blocked by default.
   const toml = read('netlify.toml');
-  assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com/, 'CSP must allow framing Cloudinary for the signed redirect');
-  assert.match(toml, /object-src 'self' https:\/\/res\.cloudinary\.com https:\/\/aict-portfolio\.vercel\.app/, 'CSP object-src must allow the Vercel resume proxy origin or every <embed> is blocked');
-  assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com https:\/\/aict-portfolio\.vercel\.app/, 'CSP frame-src must allow the Vercel resume proxy origin too');
+  assert.match(toml, /frame-src 'self'/, 'CSP frame-src must be self-only now that no resume embed exists');
+  assert.match(toml, /object-src 'self'/, 'CSP object-src must be self-only now that no resume embed exists');
+  assert.ok(!/frame-src 'self' https/.test(toml), 'stale Cloudinary/Vercel frame origins must be gone');
+  assert.ok(!/object-src 'self' https/.test(toml), 'stale Cloudinary/Vercel object origins must be gone');
 });
 
 test('public pages never show a red error box or the technical server message (2026-10-31)', () => {
@@ -452,4 +457,77 @@ test('video format: upload forms offer Shorts vs full-length, helper sends it, c
   assert.match(detail, /video_format === 'short' \? ' · Shorts'/, 'detail page must show the format');
   const forms = read('components/adminForms.tsx');
   assert.match(forms, /label="Format"/, 'project edit form must allow changing the format for video projects');
+});
+
+test('audit: sign-out signs out of Firebase, not just localStorage (FE-01)', () => {
+  const session = read('lib/session.ts');
+  assert.match(session, /signOut\(auth\)/, 'sign-out must call Firebase signOut');
+  assert.match(session, /removeItem\('aict_admin_token'\)/, 'sign-out must still clear the stored token');
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const src = read(f);
+    assert.match(src, /signOutSession/, f + ' must use the shared sign-out');
+    assert.ok(!/localStorage\.removeItem\('aict_admin_token'\)/.test(src), f + ' must not sign out by localStorage removal alone');
+  }
+  const refresher = read('components/TokenRefresher.tsx');
+  assert.match(refresher, /if \(!user\) \{ window\.localStorage\.removeItem\('aict_admin_token'\)/, 'refresher must clear the token when Firebase reports no user');
+});
+test('audit: stored URLs are scheme-checked before rendering (FE-02)', () => {
+  const guard = read('lib/safeUrl.ts');
+  assert.match(guard, /javascript/, 'guard must name the javascript scheme it refuses');
+  assert.ok(/isSafeHttpUrl/.test(guard));
+  for (const f of ['app/team/[slug]/detail.tsx', 'app/projects/[slug]/detail.tsx', 'app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'components/layout.tsx']) {
+    assert.match(read(f), /safeSrc|safeHref/, f + ' must scheme-check stored URLs');
+  }
+  assert.ok(!/href=\{p\.video_url\}/.test(read('app/projects/[slug]/detail.tsx')), 'project video link must not render an unchecked URL');
+});
+test('audit: detail slugs are encoded and malformed slugs become not-found (FE-04)', () => {
+  for (const f of ['app/team/[slug]/detail.tsx', 'app/projects/[slug]/detail.tsx']) {
+    const src = read(f);
+    assert.match(src, /encodeURIComponent\(actualSlug\)/, f + ' must encode the slug in the API call');
+    assert.match(src, /try \{ actualSlug = decodeURIComponent/, f + ' must catch a malformed slug instead of hanging');
+  }
+});
+test('audit: apiGet distinguishes an upstream HTML error from a network failure (FE-05)', () => {
+  const api = read('lib/api.ts');
+  assert.match(api, /upstream_error/, 'non-JSON responses must surface as upstream_error, not network_error');
+  assert.match(api, /content-type/, 'the parser must check the content type before parsing JSON');
+});
+test('audit: uploads have a timeout and a cancel control (FE-10)', () => {
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const src = read(f);
+    assert.match(src, /xhr\.timeout = 120000/, f + ' upload XHR must time out');
+    assert.match(src, /Cancel upload/, f + ' upload must offer a cancel button');
+  }
+  assert.match(read('lib/upload.ts'), /ontimeout/, 'direct upload helper must time out too');
+});
+test('audit: ConfirmDialog labels match the action (FE-09) and own card hides password controls (FE-07)', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.match(admin, /confirmLabel=\{confirmUserAction\.kind/, 'user-action confirm dialog must label itself by action');
+  assert.match(admin, /u\.id === meUid \? null : \(<><label>Set \/ reset password/, 'your own card must not show password fields');
+  assert.match(admin, /u\.id !== meUid && u\.account_status === 'active'/, 'your own card must not show Deactivate');
+});
+test('audit: forms strip privilege fields and clamp skill levels (FE-06)', () => {
+  const forms = read('components/adminForms.tsx');
+  assert.match(forms, /delete \(body as AnyObj\)\.id/, 'forms must not send the record id in PATCH bodies');
+  assert.match(forms, /delete \(body as AnyObj\)\.is_leader/, 'forms must not send is_leader except through the admin leader checkbox');
+  assert.match(forms, /Math\.max\(1, Math\.min\(100/, 'skill levels must be clamped to 1-100');
+});
+
+test('login redesign (2026-10-31): centred card, in-field show-password, role switch link, logic unchanged', () => {
+  const form = read('components/loginForm.tsx');
+  assert.match(form, /className="login-shell"/, 'login must render in the centred shell');
+  assert.match(form, /className="login-card"/, 'login must render as a card, not loose fields');
+  assert.match(form, /AICT Group/, 'login card must name the group');
+  assert.match(form, /login-show-btn/, 'show-password must be an in-field button, not a checkbox below the form');
+  assert.ok(!/type="checkbox"/.test(form), 'the old show-password checkbox must be gone');
+  assert.match(form, /switchHref/, 'login must link to the other login route (member <-> admin)');
+  assert.match(form, /Forgot password\?/, 'forgot password must stay');
+  assert.match(form, /There is no sign-up|no sign-up/, 'invite-only note must stay');
+  assert.match(form, /signInExisting/, 'sign-in logic must be unchanged');
+  assert.match(form, /friendlyAuthError/, 'safe error mapping must be unchanged');
+  assert.match(form, /role="alert"/, 'sign-in errors must be announced');
+  const css = read('styles/globals.css');
+  assert.match(css, /\.login-card/, 'login card styles must exist');
+  assert.match(css, /\.login-submit/, 'full-width submit styles must exist');
+  assert.ok(/\.login-shell \{[^}]*animation: none/.test(css) || /prefers-reduced-motion: reduce[\s\S]*\.login-shell \{ animation: none/.test(css), 'login entrance must respect reduced motion');
 });

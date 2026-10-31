@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { apiGet } from '../../lib/api';
+import { apiGet, authToken } from '../../lib/api';
 import { Loading, ErrorBox } from '../shared';
 
 // Role gate after login: admins go to /admin, members go to their own
@@ -12,12 +12,13 @@ export default function DashboardGate() {
   const [gateError, setGateError] = useState('');
   const check = async () => {
     setGateError('');
-    const token = window.localStorage.getItem('aict_admin_token');
+    const token = authToken();
     if (!token) { window.location.href = '/login'; return; }
     const me = await apiGet<{ role: string }>('/admin/me', true);
     if (me.data?.role === 'admin') window.location.href = '/admin';
     else if (me.data?.role === 'member') window.location.href = '/member';
     else if (me.error?.code === 'unauthenticated') window.location.href = '/login';
+    else if (me.error?.code === 'account_not_active') setGateError('Your account has been deactivated. Contact an admin to reactivate it — signing in again will not help until then.');
     else setGateError(me.error?.message || 'Could not check your account. The backend may be temporarily unavailable — your sign-in has not been lost.');
   };
   useEffect(() => { check(); }, []);

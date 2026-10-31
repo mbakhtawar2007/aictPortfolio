@@ -47,6 +47,7 @@ export async function uploadDirectFile(
     form.append('signature', String(d.signature));
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${fileType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
+    xhr.timeout = 120000;
     xhr.open('POST', endpoint);
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) onProgress(Math.round((ev.loaded / ev.total) * 100)); };
     xhr.onload = () => {
@@ -57,6 +58,7 @@ export async function uploadDirectFile(
       } catch { reject(new Error('Upload failed.')); }
     };
     xhr.onerror = () => reject(new Error('Upload failed (network).'));
+    xhr.ontimeout = () => reject(new Error('Upload timed out after 2 minutes. Check your connection and try again, or use a smaller file.'));
     xhr.send(form);
   });
   const v = await apiSend('/admin/upload/verify', 'POST', { public_id: uploaded.public_id, file_type: fileType }, true);

@@ -89,8 +89,10 @@ routing never guesses from which admin calls happen to fail.
 Visible admin navigation (2026-10-31): **Start here, Team members,
 Team accounts, Uploads**. The other sections (Projects, Achievements,
 Messages, History, Site settings) are code-intact but hidden from the
-admin nav; admins still reach project/achievement editing through the
-public-page-linked forms where applicable.
+admin nav; there is no public-page link into them, and restoring
+them to the nav is a deliberate owner decision, not a missing link.
+Project/achievement creation and editing by members happens on
+`/member` and in the Uploads video form, not through those hidden tabs.
 
 - **Start here:** what to do next, site-at-a-glance counts, a
   first-steps checklist, and publishing explained in plain words.
@@ -154,7 +156,7 @@ Two different things, kept separate:
 
 ### Adding a team member — one path only: invitation links
 
-There is exactly one way to create an account: an admin opens
+There is exactly one way to create an account through the app: an admin opens
 Team accounts → **Invite a team member** and creates an invitation
 link (32 random bytes; only its SHA-256 hash is stored; 7-day expiry;
 single use; email, role and profile link locked at creation).
@@ -164,8 +166,12 @@ own password, and the account is created active. A lost link is
 revoked (`POST /api/admin/users/invite-links/:id/revoke`) and a new
 one created. The old "Invite an account" form and
 `POST /api/admin/users/invite` are gone (the endpoint returns 404);
-an admin also cannot change their own role or status, but **can**
-link their own account to their own profile.
+an admin also cannot change their own role, status or password, but **can**
+link their own account to their own profile. The one exception to
+"exactly one way" is the one-time server-side bootstrap script
+(`backend/scripts/bootstrap-admin.js`, see DEPLOYMENT §2), which
+creates the very first admin before any admin exists — it is not an
+HTTP route and is locked down once an admin exists.
 
 When the link is created, the backend tries to email it automatically:
 Gmail SMTP first (`GMAIL_USER` + `GMAIL_APP_PASSWORD` in Vercel),
@@ -339,7 +345,8 @@ Public (no auth, published content only):
 `GET /api/members/:slug`, `GET /api/members/:slug/resume`
 (published + public resume only, signed-URL redirect),
 `GET /api/projects`, `GET /api/projects/:slug`,
-`GET /api/achievements`, `GET /api/invite/validate`,
+`GET /api/achievements`, `GET /api/gallery` (published-linked photos
+and videos only — see Security summary), `GET /api/invite/validate`,
 `POST /api/invite/accept` (token + password only),
 `POST /api/contact` (Zod-validated, rate-limited, honeypot).
 
@@ -351,7 +358,8 @@ Admin/member (Bearer Firebase ID token, every request):
 `GET/POST/PATCH/DELETE /api/admin/achievements[/:id]`
 (member: own only), `GET/PATCH /api/admin/settings` (admin only),
 `POST /api/admin/upload/sign`, `GET /api/admin/media`,
-`GET/PATCH/DELETE /api/admin/messages/:id` (admin only),
+`GET /api/admin/messages`, `PATCH/DELETE /api/admin/messages/:id`
+(admin only; there is no `GET /messages/:id` single-record route),
 `GET /api/admin/audit`, `GET /api/admin/revisions`,
 `POST /api/admin/revisions/:id/restore` (admin only).
 Project fields the API accepts include `visibility`
@@ -362,8 +370,8 @@ Project fields the API accepts include `visibility`
 `GET /api/admin/users/invite-links`,
 `POST /api/admin/users/invite-links/:id/revoke`,
 `PATCH /api/admin/users/:id` (role / account_status / member_id;
-self role or status changes are refused, self member_id changes
-are allowed),
+self role, status or password changes are refused, self member_id
+changes are allowed),
 `POST /api/admin/upload/sign`, `POST /api/admin/upload/verify`,
 `POST /api/admin/users/:id/set-password`,
 `POST /api/admin/users/:id/resend-invite`,
@@ -391,7 +399,16 @@ traces, secrets, passwords, or invitation tokens.
   lists, and `/admin` redirects them to `/member`.
 - Public endpoints return published content only. Drafts, private
   resumes, contact messages, `user_roles` and audit data are never
-  public.
+  public. `GET /api/gallery` returns only photos/videos referenced by
+  published members/projects (draft and unattached uploads are no
+  longer listed). Stored URLs (`photo_url`, `cover_url`, site links,
+  credential links) accept only http(s) or root-relative paths, and
+  the frontend scheme-checks them again before rendering, so a
+  stored `javascript:` link cannot execute. Invite accept is claimed
+  atomically, so two simultaneous accepts cannot both succeed.
+  Deactivation disables the Firebase Auth user and revokes its
+  refresh tokens; reactivation re-enables it. See `SECURITY.md` for
+  the full list and the residual risks that remain by design.
 - File uploads: PDF resumes max 5 MB, images max 5 MB, videos
   (MP4/WebM) max 50 MB; server-generated Cloudinary paths, signed
   upload only after auth + role check, and only when Cloudinary env
@@ -400,8 +417,9 @@ traces, secrets, passwords, or invitation tokens.
   and project create/patch (a pasted video URL cannot bypass it).
   Public resumes are served through a signed backend proxy
   (`GET /api/members/:slug/resume`, published + public resumes only)
-  and open in a new tab; the site CSP allows the Vercel proxy origin
-  in `object-src`/`frame-src`, which the embedded viewer required.
+  and open in a new tab. Since the embedded viewer was removed
+  (2026-10-31), the CSP `frame-src`/`object-src` are `'self'` only;
+  no Cloudinary or Vercel origin is needed for framing any more.
 - Backend fails closed when Firebase credentials are missing:
   privileged endpoints return 503 with a safe message.
 - `firestore.rules` denies everything by default; production
@@ -413,14 +431,22 @@ traces, secrets, passwords, or invitation tokens.
 
 Vercel (backend, production): `FIREBASE_ENABLED=true`,
 `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` (whole JSON,
-one line), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+one line; alternatively `GOOGLE_APPLICATION_CREDENTIALS` pointing at a
+service-account file on a server you control), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
 `CLOUDINARY_API_SECRET`, `CORS_ORIGIN=https://aictportfollio.netlify.app`
-(no trailing slash). Invite emails: `GMAIL_USER` +
+(no trailing slash; `*` and trailing slashes are stripped by the
+backend). Invite emails: `GMAIL_USER` +
 `GMAIL_APP_PASSWORD` (Gmail SMTP first; a Gmail App Password, not the
-account password, pasted without spaces). Optional: `RESEND_API_KEY` +
-`CONTACT_NOTIFY_EMAIL` (fallback if Gmail is not configured). `PUBLIC_SITE_URL` sets the
+account password, pasted without spaces). Optional: `RESEND_API_KEY`
+(invite-email fallback when Gmail is not configured) and
+`CONTACT_NOTIFY_EMAIL` (where contact-form notifications go; the
+contact form itself never stores messages). `PUBLIC_SITE_URL` sets the
 base used for invitation links (defaults to the Netlify site URL).
-Never set `DEMO_MODE=true` in production. Never commit a `.env` file.
+Local dev only: `PORT` (default 4001) and the one-time bootstrap
+`BOOTSTRAP_TOKEN` + `BOOTSTRAP_EMAIL` + `BOOTSTRAP_PASSWORD` (see
+DEPLOYMENT §2). `DEMO_MODE=true` is refused in any deployed
+environment (Vercel or `NODE_ENV=production`) since the 2026-10-31
+hardening; it only ever works locally. Never commit a `.env` file.
 
 Netlify (frontend, build time): `NEXT_PUBLIC_API_URL=https://aict-portfolio.vercel.app/api`,
 `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
@@ -458,12 +484,22 @@ environment, so no Lighthouse score is claimed here).
   `src/routes/public.js`; validation in `src/validate.js`;
   role/activation logic in `src/auth.js`; upload verification in
   `src/verifyAsset.js` (format/size rules, rejected assets
-  destroyed); resume proxy URL building in `src/resumeUrl.js`.
-- `frontend/lib/` — `api.ts` (token + fetch helpers), `upload.ts`
-  (direct Cloudinary upload via backend sign + server verify),
-  `videoProject.ts` (video upload → project card),
-  `videoThumb.ts` (derived first-frame thumbnails),
-  `frontend/components/TokenRefresher.tsx` (silent token refresh).
+  destroyed); resume proxy URL building in `src/resumeUrl.js`;
+  asset ownership in `src/ownership.js` (exact owner parse, not a
+  substring match); rate limiting in `src/rateLimit.js`; audit
+  helpers in `src/audit.js`; demo data in `src/demoData.js`
+  (local only, never in production).
+- `frontend/lib/` — `api.ts` (token + fetch helpers, upstream-error
+  distinction), `upload.ts` (direct Cloudinary upload via backend
+  sign + server verify), `videoProject.ts` (video upload → project
+  card), `videoThumb.ts` (derived first-frame thumbnails),
+  `safeUrl.ts` (http(s)/root-relative URL guard for rendered links
+  and images), `session.ts` (shared Firebase sign-out),
+  `types.ts`, `scroll3d.ts`; `frontend/components/` — `layout.tsx`
+  (header/footer/nav), `ui.tsx` (toasts, modal, lightbox, confirm
+  dialog), `adminForms.tsx` (member/project/achievement/settings
+  forms), `TokenRefresher.tsx` (silent token refresh),
+  `Scene/*` (cosmic WebGL background).
 - `firestore.rules` — deny-all by default.
 - `DEPLOYMENT.md` — the original hand-done setup steps. Where it
   disagrees with this README about publishing, this README is
@@ -499,17 +535,32 @@ Run these from the project directories. All tests use local demo mode only
 Cloudinary asset is touched.
 
 Backend (from `backend/`):
-- `npm test` — API regression suite (`tests/api.test.js`): 34 pass
-  (2026-10-31, incl. leader-live, visibility, video-format,
+- `npm test` — API regression suite (`tests/api.test.js`): 43 pass
+  (2026-10-31, incl. leader-live, visibility, video-format, and
+  the audit hardening regressions: concurrent invite accept,
+  deployed-without-Firebase fail-closed, safe-URL rejection,
+  privilege-field stripping, delete-404s, profile-link 409s,
+  exact owner parsing, resume-proxy external-URL 404,
+  CORS normalisation, malformed-JSON 400),
   invite-link and resume-proxy tests).
-- `npm run lint` — `node --check` over every backend source file.
+- `npm run lint` — `node --check` over every backend source file
+  plus ESLint (`eslint.config.mjs`).
 - `npm run build` — there is no backend build step; the Vercel adapter is
   `api/index.js` (syntax-checked by lint).
 
 Frontend (from `frontend/`):
-- `npm test` — static regression checks (`tests/static.test.js`): 44 pass
-  (incl. token-refresh, role-control and video-format checks).
-- `npm run typecheck` — `tsc --noEmit`.
+- `npm test` — static regression checks (`tests/static.test.js`): 51 pass
+  (incl. token-refresh, role-control, video-format and the audit
+  hardening checks: real sign-out, safe-URL guard, encoded slugs,
+  upstream-error distinction, upload timeout/cancel, confirm-dialog
+  labels, own-card hiding, form field stripping).
+- `npm run lint` — ESLint (`eslint.config.mjs`: typescript-eslint +
+  react-hooks; see its header for the two documented rule-offs).
+- `npm run typecheck` — `tsc --noEmit`. (The old static tests also cover
+  that no CSP/test assertions were silently loosened — the CSP test
+  was updated only where the resume-embed removal made the old
+  assertion false, and the photo-card test only to accept the
+  safe-URL guard as the photo check.)
 - `npm run build` — Next.js production build (17 static pages).
 
 Blocked (not run, do not claim): a real Lighthouse run (no Lighthouse /
@@ -520,17 +571,8 @@ a real asset, a full invited-member end-to-end run, and npm audit
 
 ## Invitations
 
-One admin-only way to add a person (there is no public sign-up):
-
-**Invite via link:** Admin dashboard → Team accounts →
-"Invite a team member". The admin gets a link (valid 7 days, single
-use) and the page note says how it was delivered: automatic Gmail
-SMTP send when `GMAIL_USER` + `GMAIL_APP_PASSWORD` are configured,
-Resend fallback, otherwise link-only (copy it and send it yourself).
-The recipient opens the link, sees the email and role fixed by the
-admin, chooses their own password, and their account is created
-active. The plaintext link is shown only once; if it is lost, revoke
-it and create a new one. Creating an admin requires a deliberate
-confirmation checkbox in the invite form. There is no second
-"Invite an account" form is gone (setting a password on an
-existing account from its card is a separate, existing action).
+See "Adding a team member — one path only: invitation links" above:
+one admin-only path, no public sign-up, link valid 7 days and single
+use, plaintext shown only once, revoke-and-recreate when lost.
+Setting a password on an existing account from its card is a
+separate, existing action, not a second invitation form.

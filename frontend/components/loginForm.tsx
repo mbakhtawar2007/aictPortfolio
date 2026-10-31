@@ -47,17 +47,34 @@ export default function LoginForm({ heading }: { heading: string }) {
     } catch (err) { setError(friendlyAuthError(err)); setBusy(false); }
   }
   const [showPw, setShowPw] = useState(false);
-  return (<div><h1>{heading}</h1>
-    <p className="muted">Existing accounts only. There is no sign-up link, and no account can be created from this page. An admin must invite you first.</p>
-    {!firebaseConfigured() && <p className="error">Firebase is not configured for this build (NEXT_PUBLIC_FIREBASE_* missing). Sign-in will fail until the site owner sets those public config values at Netlify build time. This is not a broken password — it is a missing configuration.</p>}
-    <form onSubmit={submit}>
-      <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-      <label>Password<input required type={showPw ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-      <p><label><input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show password</label></p>
-      {error && <p className="error">{error}</p>}
-      <button className="btn" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-      <p><button type="button" className="btn secondary small" disabled={forgotBusy} onClick={forgotPassword}>{forgotBusy ? 'Sending…' : 'Forgot password?'}</button></p>
-      {resetNote && <p className="success">{resetNote}</p>}
-    </form>
-    <p className="muted">If your account was deactivated, sign-in will not work — contact the admin.</p></div>);
+  // The two login routes share this form; the switch link points at the
+  // other one. The account's role, not this link, decides where a
+  // successful sign-in lands.
+  const isAdminLogin = heading === 'Admin login';
+  const switchHref = isAdminLogin ? '/login' : '/admin/login';
+  const switchLabel = isAdminLogin ? 'Member login' : 'Admin login';
+  return (<div className="login-shell">
+    <div className="login-card">
+      <p className="login-eyebrow">AICT Group</p>
+      <h1 className="login-title">{heading}</h1>
+      <p className="login-subtitle">Welcome back. Sign in to your team workspace.</p>
+      {!firebaseConfigured() && <p className="error" role="alert">Firebase is not configured for this build (NEXT_PUBLIC_FIREBASE_* missing). Sign-in will fail until the site owner sets those public config values at Netlify build time. This is not a broken password — it is a missing configuration.</p>}
+      <form onSubmit={submit} className="login-form">
+        <label className="login-label" htmlFor="login-email">Email</label>
+        <input id="login-email" className="login-input" required type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <label className="login-label" htmlFor="login-password">Password</label>
+        <div className="login-password-wrap">
+          <input id="login-password" className="login-input login-password-input" required type={showPw ? 'text' : 'password'} autoComplete="current-password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <button type="button" className="login-show-btn" aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw} onClick={() => setShowPw((v) => !v)}>{showPw ? 'Hide' : 'Show'}</button>
+        </div>
+        <p className="login-forgot"><button type="button" className="login-link-btn" disabled={forgotBusy} onClick={forgotPassword}>{forgotBusy ? 'Sending…' : 'Forgot password?'}</button></p>
+        {error && <p className="error" role="alert">{error}</p>}
+        <button className="btn login-submit" disabled={busy}>{busy ? (<><span className="spinner" /> Signing in…</>) : 'Sign in'}</button>
+        {resetNote && <p className="success" role="status">{resetNote}</p>}
+      </form>
+      <p className="login-note">🔒 Existing accounts only — there is no sign-up here. An admin must invite you first.</p>
+      <p className="login-switch">Signing in as the other role? <a href={switchHref}>{switchLabel} →</a></p>
+    </div>
+    <p className="login-foot"><a href="/">← Back to home</a><span className="login-foot-sep"> · </span><span className="muted">Deactivated account? Contact the admin — sign-in will not work until it is reactivated.</span></p>
+  </div>);
 }

@@ -5,9 +5,10 @@
 // has been verified. It reuses the existing POST /admin/projects endpoint,
 // so the backend's own rules still apply:
 //  - an admin's project can be 'published' and appears on /projects at once;
-//  - a member's project is forced to 'draft' by the backend, so an admin
-//    must publish it before it appears publicly (same rule as a manually
-//    created member project).
+//  - the Group Leader's project can be 'published' too and goes live at
+//    once (user rule 2026-10-31); any other member's project is forced to
+//    'draft' by the backend, so an admin must publish it before it
+//    appears publicly (same rule as a manually created member project).
 // The upload itself is never rolled back if this fails: the video stays in
 // Uploads and the caller reports the failure so the card can be made by hand.
 import { apiSend } from './api';
@@ -85,7 +86,7 @@ export async function createVideoProject(input: {
       case_study: (input.caseStudy || '').trim().slice(0, 20000),
       characters: (input.characters || []).map((c) => c.trim().slice(0, 200)).filter(Boolean),
       tech_stack: (input.techStack || []).map((s) => s.trim()).filter(Boolean),
-      // Members are forced to 'draft' by the backend; admins stay published.
+      // Non-leader members are forced to 'draft' by the backend; admins and the Group Leader stay published.
       // Private is always a draft, even for admins (backend enforces it too).
       status: input.visibility === 'private' ? 'draft' : 'published',
       member_ids: input.memberIds || [],

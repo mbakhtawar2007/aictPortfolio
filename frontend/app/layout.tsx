@@ -4,6 +4,7 @@ import '../styles/globals.css';
 import { Navbar, Footer, BackToTop } from '../components/layout';
 import SmoothScroll from '../components/SmoothScroll';
 import CosmicBackgroundLoader from '../components/Scene/CosmicBackgroundLoader';
+import TokenRefresher from '../components/TokenRefresher';
 export const metadata: Metadata = { title: 'AICT Group Portfolio', description: 'The AICT group: who we are, what we build, and what we have achieved.' };
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('aict_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(localStorage.getItem('aict_reduce')==='true'){document.documentElement.setAttribute('data-reduce','true');}}catch(e){}})();`;
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       <SmoothScroll />
       <CosmicBackgroundLoader />
+      <TokenRefresher />
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <Navbar />
       <main id="main-content">{children}</main>

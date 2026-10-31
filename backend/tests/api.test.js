@@ -391,3 +391,19 @@ test('project visibility: public listed, unlisted link-only, private forced draf
   await call('DELETE', `/api/admin/projects/${unl.json.data.id}`, ADMIN);
   await call('DELETE', `/api/admin/projects/${priv.json.data.id}`, ADMIN);
 });
+
+test('leader member project goes live at once; non-leader member stays draft; leader private still draft (2026-10-31)', async () => {
+  const before = await store.memberById('sample-member-1');
+  const wasLeader = before?.is_leader;
+  try {
+    await store.saveMember('sample-member-1', { ...before, is_leader: true });
+    const live = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('leader-live'), title: 'Leader Live', category: 'AI Video', video_url: 'https://example.com/v.mp4', status: 'published' });
+    assert.equal(live.status, 201); assert.equal(live.json.data.status, 'published');
+    const priv = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('leader-priv'), title: 'Leader Private', category: 'AI Video', video_url: 'https://example.com/v.mp4', status: 'published', visibility: 'private' });
+    assert.equal(priv.json.data.status, 'draft');
+  } finally {
+    await store.saveMember('sample-member-1', { ...before, is_leader: wasLeader ?? false });
+  }
+  const draft = await call('POST', '/api/admin/projects', MEMBER, { slug: uid('member-draft'), title: 'Member Draft', status: 'published' });
+  assert.equal(draft.json.data.status, 'draft');
+});

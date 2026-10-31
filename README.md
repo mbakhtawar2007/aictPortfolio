@@ -4,6 +4,13 @@ A long-term team portfolio for the AICT group: homepage, team profiles,
 projects, achievements, contact, skills matrix, and a dashboard for
 admins and team members — all editable without a code change.
 
+Current state (2026-10-31, live): video uploads use a YouTube-style form
+(custom thumbnail, category, Public/Unlisted/Private visibility, tags,
+year); video uploads are limited to admins and the Group Leader, and the
+Leader's videos go live at once while other members' stay drafts; signed-in
+sessions refresh their Firebase token silently before the 1-hour expiry;
+public resumes open in a new tab instead of an embedded modal viewer.
+
 ## Live sites
 
 - **Public site (Netlify):** https://aictportfollio.netlify.app
@@ -69,16 +76,19 @@ it returns `live_on_next_load`.
 
 ## Two dashboards, by role
 
-Login is the same page for everyone (`/admin/login`), then a role
-gate (`/dashboard`) sends each person to the right place. The backend
+Login is `/login` ("Member login"; `/admin/login` is an alias titled
+"Admin login"), then a role gate (`/dashboard`) sends each person to
+the right place. The backend
 endpoint `GET /api/admin/me` returns the signed-in actor's role, so
 routing never guesses from which admin calls happen to fail.
 
 ### Admin — `/admin`
 
-Grouped, plain-language navigation: **Content** (Start here, Team
-members, Projects, Achievements), **People** (Team accounts, Messages,
-Photos & files), **Advanced** (History, Site settings).
+Visible admin navigation (2026-10-31): **Start here, Team members,
+Team accounts, Uploads**. The other sections (Projects, Achievements,
+Messages, History, Site settings) are code-intact but hidden from the
+admin nav; admins still reach project/achievement editing through the
+public-page-linked forms where applicable.
 
 - **Start here:** what to do next, site-at-a-glance counts, a
   first-steps checklist, and publishing explained in plain words.
@@ -112,7 +122,11 @@ A member **never sees the admin page**. Their own page only shows:
 - **My projects** — only projects they are assigned to; a new
   project they create includes them automatically.
 - **My achievements** — only their own.
-- **My photos & files** — upload a photo or resume PDF, copy its URL.
+- **My photos & files (Uploads)** — upload a photo or resume PDF, copy
+  its URL, edit an upload's title/description. Video uploads are limited
+  to the Group Leader and admins: the Video option is hidden for other
+  members. A Group Leader's video project goes live at once; any other
+  member's video project is a draft until an admin publishes it.
 
 Members cannot see other members' accounts, the messages inbox,
 site settings, or history. The backend already filters the members,
@@ -131,28 +145,30 @@ Two different things, kept separate:
    name, slug, bio, skills, education, experience, links, photo,
    resume.
 
-### Adding a team member — three ways, pick one per person
+### Adding a team member — one path only: invitation links
 
-**A. Admin sets the password (simplest, no email needed).**
-In Team accounts → Invite an account, fill name, email, role, and
-the optional password (at least 6 characters). Or, for an existing
-account, use **Set password** on its card. Share the password
-privately with that person — it is **never shown again, never
-stored in Firestore, never logged, and never returned by the API**.
-It is used once through the Firebase Admin SDK
-(`POST /api/admin/users/invite`, `POST /api/admin/users/:id/set-password`).
-Ask the person to change it after first login (login page →
-Forgot password). An admin cannot set their own password this way.
+There is exactly one way to create an account: an admin opens
+Team accounts → **Invite a team member** and creates an invitation
+link (32 random bytes; only its SHA-256 hash is stored; 7-day expiry;
+single use; email, role and profile link locked at creation).
+The plaintext link is shown **only once** at creation. The recipient
+opens `/invite?token=…`, sees the fixed email and role, chooses their
+own password, and the account is created active. A lost link is
+revoked (`POST /api/admin/users/invite-links/:id/revoke`) and a new
+one created. The old "Invite an account" form and
+`POST /api/admin/users/invite` are gone (the endpoint returns 404);
+an admin also cannot change their own role or status, but **can**
+link their own account to their own profile.
 
-**B. Leave the password blank — a setup email is sent automatically.**
-The admin page sends Firebase's own password-setup email from the
-browser (`sendPasswordResetEmail`) when Resend is not configured,
-so nobody has to open Firebase Console. The person clicks the link
-and sets their own password. If Resend **is** configured in Vercel,
-the backend sends the setup link through Resend instead, and the
-browser does not send a second one.
+When the link is created, the backend tries to email it automatically:
+Gmail SMTP first (`GMAIL_USER` + `GMAIL_APP_PASSWORD` in Vercel),
+then Resend, otherwise link-only — and the page note says which one
+happened. A failed send never blocks the link itself. Gmail delivery
+was configured by the site owner on 2026-10-31; a live send (invite
+created → note says "sent via Gmail" → email lands) is still to be
+confirmed with a real test invite.
 
-**C. Member fills their own profile.**
+**Member fills their own profile.**
 Invite the account with no profile linked. After the member sets
 their password and logs in, they see **Create my profile** on
 `/member`. It is saved as a draft, linked to their account, and an
@@ -203,8 +219,10 @@ NEXT_PUBLIC_API_URL=http://localhost:4001/api npm run build
 ```
 
 Demo auth tokens (local verification only, `DEMO_MODE=true`,
-Firebase off): `demo-admin-token` (admin) and `demo-member-token`
-(member, linked to sample-member-1). Example:
+Firebase off): `demo-admin-token` (admin), `demo-member-token`
+(member, linked to sample-member-1) and `demo-unlinked-token`
+(member with no linked profile, for the profile-less-member tests).
+Example:
 `curl -H "Authorization: Bearer demo-admin-token" http://localhost:4001/api/admin/me`.
 These tokens are rejected unless `DEMO_MODE=true`.
 **Never set `DEMO_MODE=true` in Vercel/production.**
@@ -228,7 +246,9 @@ Admin/member (Bearer Firebase ID token, every request):
 `GET/PATCH/DELETE /api/admin/messages/:id` (admin only),
 `GET /api/admin/audit`, `GET /api/admin/revisions`,
 `POST /api/admin/revisions/:id/restore` (admin only),
-`GET /api/admin/users`, `POST /api/admin/users/invite`,
+`GET /api/admin/users`, `POST /api/admin/users/invite-link`,
+`GET /api/admin/users/invite-links`,
+`POST /api/admin/users/invite-links/:id/revoke`,
 `PATCH /api/admin/users/:id`,
 `POST /api/admin/users/:id/set-password`,
 `POST /api/admin/users/:id/resend-invite`,
@@ -243,9 +263,9 @@ traces, secrets, passwords, or invitation tokens.
 
 - No public sign-up: no `/signup` page, no client `signUp` /
   `createUser` call, and `POST /api/auth/register` returns 404.
-- Only an authenticated admin may invite accounts
-  (`POST /api/admin/users/invite`, idempotent on retry,
-  audit-logged). Roles live in Firestore `user_roles`
+- Only an authenticated admin may invite accounts, via invitation
+  links (`POST /api/admin/users/invite-link`, audit-logged; only the
+  SHA-256 hash of the token is stored). Roles live in Firestore `user_roles`
   (admin/member, invited/active/deactivated) and are checked
   server-side on every protected request. Roles are never trusted
   from the request body, user metadata, or client state.
@@ -257,10 +277,16 @@ traces, secrets, passwords, or invitation tokens.
 - Public endpoints return published content only. Drafts, private
   resumes, contact messages, `user_roles` and audit data are never
   public.
-- File uploads: PDF resumes max 5 MB, images only, server-generated
-  Cloudinary paths, signed upload only after auth + role check,
-  and only when Cloudinary env vars are present (otherwise 503,
-  fail closed).
+- File uploads: PDF resumes max 5 MB, images max 5 MB, videos
+  (MP4/WebM) max 50 MB; server-generated Cloudinary paths, signed
+  upload only after auth + role check, and only when Cloudinary env
+  vars are present (otherwise 503, fail closed). Video uploads are
+  additionally gated to admins and the Group Leader at sign, verify,
+  and project create/patch (a pasted video URL cannot bypass it).
+  Public resumes are served through a signed backend proxy
+  (`GET /api/members/:slug/resume`, published + public resumes only)
+  and open in a new tab; the site CSP allows the Vercel proxy origin
+  in `object-src`/`frame-src`, which the embedded viewer required.
 - Backend fails closed when Firebase credentials are missing:
   privileged endpoints return 503 with a safe message.
 - `firestore.rules` denies everything by default; production
@@ -274,10 +300,11 @@ Vercel (backend, production): `FIREBASE_ENABLED=true`,
 `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` (whole JSON,
 one line), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
 `CLOUDINARY_API_SECRET`, `CORS_ORIGIN=https://aictportfollio.netlify.app`
-(no trailing slash). Optional: `RESEND_API_KEY` +
-`CONTACT_NOTIFY_EMAIL` (see "Accounts" — without them, setup
-emails go through Firebase automatically). Never set
-`DEMO_MODE=true` in production. Never commit a `.env` file.
+(no trailing slash). Invite emails: `GMAIL_USER` +
+`GMAIL_APP_PASSWORD` (Gmail SMTP first; a Gmail App Password, not the
+account password, pasted without spaces). Optional: `RESEND_API_KEY` +
+`CONTACT_NOTIFY_EMAIL` (fallback if Gmail is not configured).
+Never set `DEMO_MODE=true` in production. Never commit a `.env` file.
 
 Netlify (frontend, build time): `NEXT_PUBLIC_API_URL=https://aict-portfolio.vercel.app/api`,
 `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
@@ -288,20 +315,27 @@ set `SECRETS_SCAN_ENABLED=false`).
 
 ## Styling choice
 
-Plain CSS with the spec's Neural Studio tokens (background #070B16,
-blue #3B82F6 → violet #8B5CF6 → cyan #06B6D4) is used instead of
-Tailwind, to keep the static-export build reliable. Tailwind can be
-added later without changing the API or data model. No GSAP,
-Three.js or Lottie; reduced-motion is honoured via CSS.
+Plain CSS (no Tailwind) keeps the static-export build reliable.
+Public routes use a cosmic dark theme (default) with a light variant:
+a fixed WebGL nebula canvas (three.js via React Three Fiber/Drei)
+behind the content, excluded from admin/member/login/invite pages.
+Reduced-motion is honoured via CSS and a toggle; a skip link, visible
+focus outlines, 44px touch targets, and `aria-label`/`role` attributes
+on interactive images and tabs are in place (static audit 2026-10-31:
+viewport meta, 640/768px breakpoints, no positive `tabIndex`, live
+pages all 200 — a real Lighthouse run was not possible in that
+environment, so no Lighthouse score is claimed here).
 
 ## File map
 
 - `frontend/` — Next.js 16 App Router, TypeScript,
   `output: 'export'`. Pages: `/` (home), `/team`, `/team/[slug]`,
-  `/projects`, `/projects/[slug]`, `/achievements`, `/skills`,
-  `/contact`, `/admin`, `/admin/login`, `/member`, `/dashboard`
-  (role gate). `frontend/netlify.toml` — build + detail-page
-  rewrites (see "How publishing works").
+  `/projects`, `/projects/[slug]`, `/skills`, `/contact`,
+  `/admin`, `/admin/login`, `/login`, `/invite`, `/member`,
+  `/dashboard` (role gate). `/gallery` and `/achievements` pages
+  were removed (2026-10-30); their backend data/endpoints remain.
+  `frontend/netlify.toml` — build + detail-page rewrites (see
+  "How publishing works") and the CSP (see "Security summary").
 - `backend/` — Express app factory (`src/app.js`, no listener on
   import), Vercel adapter (`api/index.js`), local-only server
   (`src/server.js`). Routes in `src/routes/admin.js` and
@@ -314,18 +348,19 @@ Three.js or Lottie; reduced-motion is honoured via CSS.
 
 ## What is still open
 
-- Group name, logo and brand are still open decisions — the UI
-  stays generic ("AICT Group") and uses initials avatars / a
-  placeholder SVG only. No logo or real member photo has been
-  invented.
-- No real member, project or achievement content exists yet in the
-  live database (it is empty, not SAMPLE — demo SAMPLE data only
-  appears in local demo mode and is labelled SAMPLE everywhere).
-- No device / Lighthouse testing has been done on the new
-  `/member` page or the detail-page rewrites; the rewrites should
-  be confirmed live with a real new member/project slug after the
-  next deploy.
-- Resend is optional and not required for invites to work.
+- Group logo and brand are still open decisions — no logo or real
+  member photo has been invented. Real content now exists live
+  (6 published members as of 2026-10-31); more real members/projects
+  are added only from owner-supplied content.
+- Live Gmail invite send: configured 2026-10-31, still to be
+  confirmed with a real test invite (see "Accounts").
+- Team accounts simplification: an example was requested by the
+  owner (2026-10-31) and is pending their go-ahead; not built yet.
+- Owner's live tests still unreported: a video upload through the
+  YouTube-style form, and the new-tab resume view.
+- Not run live (deliberately): contact-form submission, destructive
+  CRUD, media-delete with a real asset, and a full invited-member
+  invite-accept → login → deactivation end-to-end run.
 
 ## Testing
 
@@ -334,34 +369,37 @@ Run these from the project directories. All tests use local demo mode only
 Cloudinary asset is touched.
 
 Backend (from `backend/`):
-- `npm test` — API regression suite (`tests/api.test.js`): 16 pass, 1 skipped.
+- `npm test` — API regression suite (`tests/api.test.js`): 33 pass
+  (2026-10-31, incl. leader-live, visibility, invite-link and
+  resume-proxy tests).
 - `npm run lint` — `node --check` over every backend source file.
 - `npm run build` — there is no backend build step; the Vercel adapter is
   `api/index.js` (syntax-checked by lint).
 
 Frontend (from `frontend/`):
-- `npm test` — static regression checks (`tests/static.test.js`): 11 pass.
+- `npm test` — static regression checks (`tests/static.test.js`): 42 pass.
 - `npm run typecheck` — `tsc --noEmit`.
-- `npm run build` — Next.js production build (16 static pages).
+- `npm run build` — Next.js production build (17 static pages).
 
-Blocked (not run, do not claim): browser/viewport/keyboard/Lighthouse
-checks, live Firebase first-login, live Cloudinary upload/verify, live
-contact submission, and npm audit (registry-blocked in this environment).
+Blocked (not run, do not claim): a real Lighthouse run (no Lighthouse /
+Chrome binary in this environment), live contact submission
+(deliberately not sent), live destructive CRUD, live media-delete with
+a real asset, a full invited-member end-to-end run, and npm audit
+(registry-blocked in this environment).
 
 ## Invitations
 
-Two admin-only ways to add a person (there is no public sign-up):
+One admin-only way to add a person (there is no public sign-up):
 
-1. **Invite via link (recommended):** Admin dashboard → Team accounts →
-   "Invite via link". The admin gets a link (valid 7 days, single use) and
-   can copy it or send it with the one-click "Send via Gmail" button, which
-   opens a ready-to-send Gmail message from the admin's own Gmail. The
-   recipient opens the link, sees the email and role fixed by the admin,
-   chooses their own password, and their account is created active. The
-   plaintext link is shown only once; if it is lost, revoke it and create
-   a new one. If Resend is configured with a verified sending domain, the
-   backend also emails the link automatically; without that, no automatic
-   email is sent — the link must be sent by the admin.
-2. **Invite an account:** the admin sets a password (shared privately) or
-   leaves it blank, in which case the page automatically sends Firebase's
-   own password-setup email to the person.
+**Invite via link:** Admin dashboard → Team accounts →
+"Invite a team member". The admin gets a link (valid 7 days, single
+use) and the page note says how it was delivered: automatic Gmail
+SMTP send when `GMAIL_USER` + `GMAIL_APP_PASSWORD` are configured,
+Resend fallback, otherwise link-only (copy it and send it yourself).
+The recipient opens the link, sees the email and role fixed by the
+admin, chooses their own password, and their account is created
+active. The plaintext link is shown only once; if it is lost, revoke
+it and create a new one. Creating an admin requires a deliberate
+confirmation checkbox in the invite form. There is no second
+"Invite an account" form is gone (setting a password on an
+existing account from its card is a separate, existing action).

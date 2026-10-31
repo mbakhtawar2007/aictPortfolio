@@ -100,7 +100,9 @@ adminRouter.post('/projects', requireMemberOrAdmin(async (req, res) => {
   if (req.actor.role === 'member' && (p.data.video_url || p.data.category === 'AI Video') && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
   // Audit fix 2026-10-29: member-created projects are drafts until an admin
   // publishes them (previously a member could POST status: 'published').
-  if (req.actor.role === 'member') p.data.status = 'draft';
+  // Exception 2026-10-31 (user rule): the Group Leader's uploads go live at
+  // once. canUploadVideo is exactly the leader check for members here.
+  if (req.actor.role === 'member' && !(await canUploadVideo(req.actor))) p.data.status = 'draft';
   if (p.data.visibility === 'private') p.data.status = 'draft';
   // Audit fix 2026-10-29 (security review): a member must not attach other
   // members to a project on create — that would grant them edit rights.

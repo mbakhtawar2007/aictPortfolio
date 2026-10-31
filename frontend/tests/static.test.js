@@ -418,3 +418,14 @@ test('YouTube-like video upload form (2026-10-31)', () => {
   assert.match(form, /Select label="Visibility"/);
   assert.match(read('app/projects/[slug]/detail.tsx'), /Tags<\/h2>/);
 });
+
+test('silent token refresh: refresher mints a fresh Firebase token before the 1h expiry (2026-10-31)', () => {
+  const refresher = read('components/TokenRefresher.tsx');
+  assert.match(refresher, /getIdToken\(true\)/, 'must force-refresh the Firebase ID token');
+  assert.match(refresher, /aict_admin_token/, 'refreshed token must replace the stored token');
+  assert.match(refresher, /50 \* 60 \* 1000/, 'refresh interval must sit inside the ~1h token lifetime');
+  const layout = read('app/layout.tsx');
+  assert.match(layout, /TokenRefresher/, 'refresher must be mounted in the root layout');
+  const member = read('app/member/page.tsx');
+  assert.match(member, /Group Leader videos go live at once/, 'member upload note must state the leader live rule');
+});

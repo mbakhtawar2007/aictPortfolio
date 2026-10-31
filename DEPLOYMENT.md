@@ -1,11 +1,17 @@
 # Deployment — steps the USER must do by hand
 
-Status update: the foundation (plus the full UI/UX pass) has been pushed
-to GitHub (`mbakhtawar2007/aictPortfolio`). Nothing below has been
-deployed yet — no Vercel or Netlify site is live, and no secret was
-entered anywhere in this repo. Firebase and Cloudinary accounts were
-created by the site owner (values kept by the owner, never in chat or
-in this repo).
+Status update (2026-10-31): the site IS live — frontend
+https://aictportfollio.netlify.app (Netlify, git-linked to
+`mbakhtawar2007/aictPortfolio` `main`, base `frontend`, build
+`npm run build`, publish `out`) and backend
+https://aict-portfolio.vercel.app (Vercel project `aict-portfolio`,
+Root Directory `backend`, auto-deploys on push to `main`).
+Everything below was the original hand-done setup; it is kept as
+the record of how the live stack was built, not as a to-do list.
+Where this file disagrees with README about publishing, README is
+current: content goes live on next page load, no manual rebuild.
+No secret was entered anywhere in this repo; Firebase and Cloudinary
+values are kept by the site owner, never in chat or in this repo.
 
 ## 1. Firebase (data + Auth) — user creates the project
 
@@ -24,7 +30,7 @@ in this repo).
    control). Never commit it, never paste it into chat, never put it in
    the frontend.
 5. In Vercel, set: `FIREBASE_ENABLED=true`, `FIREBASE_PROJECT_ID`,
-   `CORS_ORIGIN=https://YOUR-NETLIFY-SITE.netlify.app`,
+   `CORS_ORIGIN=https://aictportfollio.netlify.app`,
    `DEMO_MODE` unset/false. Never set `DEMO_MODE=true` in production.
 
 ## 2. First admin bootstrap (one-time, then lock it down)
@@ -43,6 +49,11 @@ in this repo).
 ## 3. Cloudinary (files, free, no card) — user creates the account
 
 1. Create a free Cloudinary account. Note cloud name, API key, API secret.
+   **Prerequisite, easy to miss:** in Cloudinary Console → Settings →
+   Security, check "PDF and ZIP files delivery: Allow delivery of PDF
+   and ZIP files" and Save. Without it, signed PDF delivery returns
+   401 "deny or ACL failure" even though the upload and the signed URL
+   are correct (found live 2026-10-31; see README "Resumes").
 2. Set them in Vercel only: `CLOUDINARY_CLOUD_NAME`,
    `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`. Uploads are signed by
    the backend (`POST /api/admin/upload/sign`) after auth + role checks.
@@ -57,7 +68,7 @@ in this repo).
 3. Set all env vars from `backend/.env.example` (real values in Vercel only).
 4. Optional: set `RESEND_API_KEY` + `CONTACT_NOTIFY_EMAIL` for contact
    notifications. Without them, messages are still stored in Firestore.
-5. Verify: `GET https://YOUR-VERCEL-PROJECT.vercel.app/api/health`
+5. Verify: `GET https://aict-portfolio.vercel.app/api/health`
    returns 200, and `POST /api/auth/register` returns 404.
 
 ## 5. Netlify frontend — user creates the site
@@ -66,7 +77,7 @@ in this repo).
    the `out/` build output manually, as with the Showcase site).
 2. Build command `npm run build`, publish directory `out`.
    `frontend/netlify.toml` already records this.
-3. Set at build time: `NEXT_PUBLIC_API_URL=https://YOUR-VERCEL-PROJECT.vercel.app/api`
+3. Set at build time: `NEXT_PUBLIC_API_URL=https://aict-portfolio.vercel.app/api`
    and the `NEXT_PUBLIC_FIREBASE_*` public web config from Firebase
    Project Settings → Your apps → Web app. These are public config, not
    secrets — but keep them in env vars, not hardcoded.

@@ -429,3 +429,10 @@ test('silent token refresh: refresher mints a fresh Firebase token before the 1h
   const member = read('app/member/page.tsx');
   assert.match(member, /Group Leader videos go live at once/, 'member upload note must state the leader live rule');
 });
+
+test('account cards expose a role control for other accounts, never for your own (2026-10-31)', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.match(admin, /<label>Role<select/, 'account cards must offer a Role select (backend PATCH already supports role)');
+  assert.match(admin, /u\.id === meUid \? null : \(<label>Role/, 'your own card must not offer a role change (server refuses self role changes)');
+  assert.match(admin, /Grant admin to this account/, 'granting admin must ask for confirmation, like the invite form');
+});

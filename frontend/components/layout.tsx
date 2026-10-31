@@ -40,7 +40,7 @@ export function Navbar() {
   return (<header className="site-header">
     <div className="progress-bar" style={{ width: `${progress}%` }} aria-hidden="true" />
     <nav className="nav" aria-label="Main navigation">
-      {safeSrc(site?.logo_url) ? <a href="/"><img src={safeSrc(site?.logo_url)} alt={site?.group_name || 'AICT Group'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'AICT'}</a>}
+      {safeSrc(site?.logo_url) ? <a href="/"><img src={safeSrc(site?.logo_url)} alt={site?.group_name || 'TechHive'} style={{ height: 32, borderRadius: 8, verticalAlign: 'middle' }} /></a> : <a className="brand" href="/">{site?.group_name || 'TechHive'}</a>}
       <span className="nav-links">{links.map(([href, label]) => (<a key={href} href={href}>{label}</a>))}</span>
       <span className="nav-actions"><a className="btn secondary small nav-login" href="/admin/login">Admin login</a><a className="btn secondary small nav-login" href="/login">Member login</a><ThemeToggle />
         <button ref={burgerRef} className="icon-btn nav-burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="mobile-menu" onClick={() => setOpen(true)}>☰</button></span>
@@ -68,7 +68,7 @@ export function Footer() {
   // Hooks first, early return after: the layout stays mounted while
   // navigating, so a return before these hooks would change hook order
   // when moving between /admin and a public page.
-  const [siteName, setSiteName] = useState('AICT Group');
+  const [siteName, setSiteName] = useState('TechHive');
   useEffect(() => { apiGet<SiteSettings>('/site').then((r) => { if (!r.error && r.data?.group_name) setSiteName(r.data.group_name); }); }, []);
   const year = new Date().getFullYear();
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return null;

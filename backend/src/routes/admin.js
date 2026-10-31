@@ -399,13 +399,13 @@ adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
     try {
       const nodemailer = (await import('nodemailer')).default;
       const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
-      await transporter.sendMail({ from: `"AICT Group Portfolio" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your AICT portfolio invitation', text: `Hi${p.data.name ? ` ${oneLine(p.data.name)}` : ''},\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
+      await transporter.sendMail({ from: `"TechHive" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your TechHive invitation', text: `Hi${p.data.name ? ` ${oneLine(p.data.name)}` : ''},\n\nYou have been invited to TechHive. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
       emailDelivery = 'gmail';
     } catch { emailDelivery = 'failed'; }
   } else if (isFirebase() && process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
     try {
       const { Resend } = await import('resend');
-      await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: p.data.email, subject: 'Your AICT portfolio invitation', text: `You have been invited to the AICT group portfolio. Create your account here (link expires in 7 days): ${inviteLink}` });
+      await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'TechHive <onboarding@resend.dev>', to: p.data.email, subject: 'Your TechHive invitation', text: `You have been invited to TechHive. Create your account here (link expires in 7 days): ${inviteLink}` });
       emailDelivery = 'attempted';
     } catch { emailDelivery = 'link_only'; }
   }
@@ -514,7 +514,7 @@ adminRouter.post('/users/:id/resend-invite', requireAdmin(async (req, res) => {
         const link = await authAdmin().generatePasswordResetLink(row.email);
         if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
           const { Resend } = await import('resend');
-          await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: row.email, subject: 'Your AICT portfolio account', text: `Set your password here: ${link}` });
+          await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'TechHive <onboarding@resend.dev>', to: row.email, subject: 'Your TechHive account', text: `Set your password here: ${link}` });
           sent = true;
         }
       } catch (e) {

@@ -106,7 +106,7 @@ publicRouter.post('/contact', async (req, res) => {
     try {
       if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
         const { Resend } = await import('resend');
-        await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: process.env.CONTACT_NOTIFY_EMAIL, subject: `Portfolio contact: ${oneLine(body.subject) || 'New message'}`, text: `From ${oneLine(body.name)} <${body.email}>\n\n${body.message}` });
+        await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'TechHive <onboarding@resend.dev>', to: process.env.CONTACT_NOTIFY_EMAIL, subject: `Portfolio contact: ${oneLine(body.subject) || 'New message'}`, text: `From ${oneLine(body.name)} <${body.email}>\n\n${body.message}` });
       }
     } catch { /* notification failed; message is still stored */ }
     return ok(res, { received: true, id: msg.id });

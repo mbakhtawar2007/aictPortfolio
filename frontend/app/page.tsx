@@ -41,7 +41,7 @@ export default function Home() {
   const videoCount = projects.filter((p) => p.category === 'AI Video').length;
   return (<div>
     <div className="hero reveal">
-      <h1>{site?.group_name || 'AICT Group'}</h1>
+      <h1>{site?.group_name || 'TechHive'}</h1>
       <p className="hero-fullform">Application of Information and Communication Technologies</p>
       <h2>We create <span className="hero-words" aria-label="AI videos, AI tools, websites, stories"><span>AI videos</span><span>AI tools</span><span>websites</span><span>stories</span></span></h2>
       <p>{site?.tagline || 'Who we are, what we build, and what we have achieved.'}</p>

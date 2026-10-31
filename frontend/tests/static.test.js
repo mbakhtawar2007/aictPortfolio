@@ -517,7 +517,7 @@ test('login redesign (2026-10-31): centred card, in-field show-password, role sw
   const form = read('components/loginForm.tsx');
   assert.match(form, /className="login-shell"/, 'login must render in the centred shell');
   assert.match(form, /className="login-card"/, 'login must render as a card, not loose fields');
-  assert.match(form, /AICT Group/, 'login card must name the group');
+  assert.match(form, /TechHive/, 'login card must name the site (renamed from AICT Group, 2026-10-31)');
   assert.match(form, /login-show-btn/, 'show-password must be an in-field button, not a checkbox below the form');
   assert.ok(!/type="checkbox"/.test(form), 'the old show-password checkbox must be gone');
   assert.match(form, /switchHref/, 'login must link to the other login route (member <-> admin)');
@@ -530,4 +530,14 @@ test('login redesign (2026-10-31): centred card, in-field show-password, role sw
   assert.match(css, /\.login-card/, 'login card styles must exist');
   assert.match(css, /\.login-submit/, 'full-width submit styles must exist');
   assert.ok(/\.login-shell \{[^}]*animation: none/.test(css) || /prefers-reduced-motion: reduce[\s\S]*\.login-shell \{ animation: none/.test(css), 'login entrance must respect reduced motion');
+});
+
+test('site rename to TechHive (2026-10-31): displayed name is TechHive, not AICT Group', () => {
+  assert.match(read('app/layout.tsx'), /title: 'TechHive'/, 'browser title must be TechHive');
+  assert.match(read('app/page.tsx'), /group_name \|\| 'TechHive'/, 'home heading fallback must be TechHive');
+  assert.match(read('components/layout.tsx'), /group_name \|\| 'TechHive'/, 'header brand fallback must be TechHive');
+  assert.match(read('components/loginForm.tsx'), /TechHive/, 'login card must say TechHive');
+  for (const f of ['app/page.tsx', 'components/layout.tsx', 'components/loginForm.tsx', 'app/layout.tsx']) {
+    assert.ok(!/AICT Group/.test(read(f)), f + ' must not fall back to the old site name');
+  }
 });

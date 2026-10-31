@@ -11,6 +11,7 @@
 // The upload itself is never rolled back if this fails: the video stays in
 // Uploads and the caller reports the failure so the card can be made by hand.
 import { apiSend } from './api';
+import { videoThumbnailUrl } from './videoThumb';
 import type { Project } from './types';
 
 export function slugifyVideoTitle(v: string): string {
@@ -44,6 +45,7 @@ export async function createVideoProject(input: {
       description: description.slice(0, 10000),
       category: 'AI Video',
       video_url: input.videoUrl,
+      cover_url: videoThumbnailUrl(input.videoUrl) || '',
       // Members are forced to 'draft' by the backend; admins stay published.
       status: 'published',
       member_ids: input.memberId ? [input.memberId] : [],

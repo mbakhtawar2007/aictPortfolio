@@ -302,3 +302,13 @@ test('upload verify: raw PDF with no reported format passes when id/URL ends .pd
   assert.equal(checkVerifyAsset('image', { format: 'pdf', bytes: 1000, resource_type: 'image' }, 'aict-portfolio/images/x').ok, false);
   assert.equal(checkVerifyAsset('video', { format: 'mp4', bytes: 1000, resource_type: 'video' }, 'aict-portfolio/videos/x').ok, true);
 });
+
+test('project characters: created and returned on the public project (2026-10-31)', async () => {
+  const slug = uid('char-proj');
+  const created = await call('POST', '/api/admin/projects', ADMIN, { slug, title: 'Char Proj', status: 'published', characters: ['Narrator', 'Host'] });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.json.data.characters, ['Narrator', 'Host']);
+  const pub = await call('GET', `/api/projects/${slug}`);
+  assert.equal(pub.status, 200);
+  assert.deepEqual(pub.json.data.characters, ['Narrator', 'Host']);
+});

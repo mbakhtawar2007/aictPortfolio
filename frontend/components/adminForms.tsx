@@ -154,7 +154,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
   const initialIds = (initial as AnyObj)?.member_ids as string[] | undefined;
   const seededMembers = (initialMembers && initialMembers.length) ? initialMembers
     : (initialIds || []).map((member_id) => ({ member_id, role_in_project: '' }));
-  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', is_leader: false, sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
+  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], characters: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', is_leader: false, sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const csv = (v: unknown) => Array.isArray(v) ? v.join(', ') : '';
@@ -178,6 +178,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
     <Text label="Tagline" value={errText(f.tagline)} onChange={(v) => set('tagline', v)} />
     <Area label="Description" value={errText(f.description)} onChange={(v) => set('description', v)} />
     <Area label="Case study" value={errText(f.case_study)} onChange={(v) => set('case_study', v)} rows={6} />
+    <Text label="Characters involved (comma-separated)" value={csv(f.characters)} onChange={(v) => set('characters', v.split(',').map((s) => s.trim()).filter(Boolean))} /><p className="muted">For video projects: names of characters appearing in the video, if any. Shown on the project details page.</p>
     <Select label="Category" value={errText(f.category) || 'Other'} options={['AI Video', 'AI Tool', 'Website', 'Other']} onChange={(v) => set('category', v)} />
     <Text label="Tech stack (comma-separated)" value={csv(f.tech_stack)} onChange={(v) => set('tech_stack', v.split(',').map((s) => s.trim()).filter(Boolean))} />
     <Text label="Tools used (comma-separated)" value={csv(f.tools_used)} onChange={(v) => set('tools_used', v.split(',').map((s) => s.trim()).filter(Boolean))} />

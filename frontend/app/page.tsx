@@ -6,6 +6,7 @@ import { Empty, ErrorBox, Section } from './shared';
 import { SkeletonGrid } from '../components/ui';
 import ExploreStudio from '../components/ExploreStudio';
 import { scrollToSection } from '../lib/scroll3d';
+import { projectThumbnail } from '../lib/videoThumb';
 
 function Counter({ value }: { value: number }) {
   const ref = useRef<HTMLSpanElement>(null); const [n, setN] = useState(0); const started = useRef(false);
@@ -56,7 +57,7 @@ export default function Home() {
       {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}>{m.photo_url?.startsWith('http') ? <img className="avatar-img" src={m.photo_url} alt="" /> : <span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}<h3><a href={`/team/${m.slug}`}>{m.full_name}</a></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
     </div><p><a href="/team">See the full team →</a></p></>)}</Section>
     <Section title="Featured Projects">{projectsError ? (<div><ErrorBox message={projectsError} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
-      {featured.length ? featured.map((p) => (<div className="card card-hover" key={p.id}><h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>)) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
+      {featured.length ? featured.map((p) => { const ft = projectThumbnail(p); return (<div className="card card-hover" key={p.id}>{ft && <a href={`/projects/${p.slug}`}><img className="project-thumb" src={ft} alt="" loading="lazy" style={{ marginBottom: 12 }} /></a>}<h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p><span className="chip">{p.category}</span></div>); }) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>
     </div>)}</Section>
     <ExploreStudio />
     <Section title="Stats"><div className="grid">

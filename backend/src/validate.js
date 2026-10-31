@@ -50,6 +50,7 @@ export const projectSchema = z.object({
   case_study: z.string().max(20000).optional().default(''),
   category: z.enum(['AI Video', 'AI Tool', 'Website', 'Other']).optional().default('Other'),
   tech_stack: z.array(z.string()).optional().default([]), tools_used: z.array(z.string()).optional().default([]),
+  characters: z.array(z.string().trim().max(200)).optional().default([]),
   project_members: z.array(z.object({ member_id: z.string().min(1), role_in_project: z.string().optional().default('') })).optional().default([]),
   cover_url: z.string().max(1000).optional().default(''), video_url: httpUrlOrEmpty.default(''),
   repo_url: httpUrlOrEmpty.default(''), live_url: httpUrlOrEmpty.default(''),

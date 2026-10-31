@@ -275,5 +275,27 @@ test('video upload creates a project card shown in Projects (2026-10-30)', () =>
     assert.match(page, /uploadType === 'video'/, f + ' only creates a card for videos');
   }
   const projects = read('app/projects/page.tsx');
-  assert.match(projects, /p\.video_url \? <video/, 'project cards preview the video');
+  assert.match(projects, /projectThumbnail/, 'project cards use a thumbnail, not an inline player');
+  assert.ok(!/<video/.test(projects), 'the list page must not embed a player per card');
+  assert.match(projects, /project-card/, 'the whole card links to the details page');
+});
+
+test('video project cards and details: thumbnail, storyline, characters, team (2026-10-31)', () => {
+  const thumb = read('lib/videoThumb.ts');
+  assert.match(thumb, /res\.cloudinary\.com/, 'thumbnails derive from Cloudinary video URLs');
+  assert.match(thumb, /so_0,f_jpg,w_800/, 'thumbnail is a first-frame jpg, 800px wide');
+  assert.match(thumb, /cover_url \|\| videoThumbnailUrl/, 'an admin cover wins over a derived thumbnail');
+  const helper = read('lib/videoProject.ts');
+  assert.match(helper, /cover_url: videoThumbnailUrl/, 'a video upload stores its thumbnail as the project cover');
+  const detail = read('app/projects/[slug]/detail.tsx');
+  assert.match(detail, /poster=\{thumb/, 'the detail player uses the thumbnail as its poster');
+  assert.match(detail, /Storyline &amp; plot/, 'video details show a storyline section');
+  assert.match(detail, /Characters involved/, 'video details show a characters section');
+  assert.match(detail, /Team &amp; group members/, 'video details show group/member info');
+  assert.match(detail, /projectThumbnail\(r\)/, 'related cards also show thumbnails');
+  const form = read('components/adminForms.tsx');
+  assert.match(form, /Characters involved/, 'the project form lets an admin enter characters');
+  const css = read('styles/globals.css');
+  assert.match(css, /\.project-thumb/, 'thumbnail CSS exists');
+  assert.match(css, /aspect-ratio: 16 \/ 9/, 'thumbnails keep a 16:9 ratio on any screen');
 });

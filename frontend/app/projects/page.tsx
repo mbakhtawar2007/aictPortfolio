@@ -4,6 +4,7 @@ import { apiGet } from '../../lib/api';
 import type { Project } from '../../lib/types';
 import { Empty, ErrorBox } from '../shared';
 import { SkeletonGrid, Tabs } from '../../components/ui';
+import { projectThumbnail } from '../../lib/videoThumb';
 const CATS = ['All', 'AI Video', 'AI Tool', 'Website', 'Other'];
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
@@ -18,7 +19,7 @@ export default function ProjectsPage() {
     {error ? (<div><ErrorBox message={error} /><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list — the request failed.</p></div>) : (<>
     <label>Search by title or technology<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Next.js" /></label>
     <p className="muted">{filtered.length} of {projects.length} projects {(q || cat !== 'All') && <button className="btn secondary small" onClick={() => { setQ(''); setCat('All'); }}>Clear filters</button>}</p>
-    <div className="grid">{filtered.map((p) => (<div className="card card-hover" key={p.id}>{p.video_url ? <video controls preload="metadata" src={p.video_url} style={{ width: '100%', borderRadius: 12, marginBottom: 8 }} /> : null}<h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p><span className="chip">{p.category}</span>{(p.tech_stack || []).map((t) => <span className="chip" key={t}>{t}</span>)}</div>))}</div>
+    <div className="grid">{filtered.map((p) => { const thumb = projectThumbnail(p); const short = p.tagline || (p.description ? (p.description.length > 140 ? `${p.description.slice(0, 140)}…` : p.description) : ''); return (<a className="card card-hover project-card" key={p.id} href={`/projects/${p.slug}`}><div className="project-thumb-wrap">{thumb ? <img className="project-thumb" src={thumb} alt="" loading="lazy" /> : <div className="project-thumb project-thumb-fallback" aria-hidden="true">▶</div>}{p.video_url && <span className="project-play" aria-hidden="true">▶</span>}</div><h3>{p.title}</h3>{short && <p>{short}</p>}<span className="chip">{p.category}</span>{(p.tech_stack || []).map((t) => <span className="chip" key={t}>{t}</span>)}</a>); })}</div>
     {!filtered.length && <Empty text="No projects match that filter." />}</>)}
     </div></div>);
 }

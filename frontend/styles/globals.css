@@ -71,7 +71,12 @@ main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
    a 16:9 thumbnail (cover or first video frame) and a play badge. */
 .project-card { text-decoration: none; color: inherit; display: block; }
 .project-card h3 { color: var(--text); }
-.project-thumb-wrap { position: relative; margin-bottom: 12px; }
+.project-thumb-wrap { position: relative; margin-bottom: 12px; overflow: hidden; border-radius: 12px; }
+.project-thumb-wrap::after { content: ''; position: absolute; inset: auto 0 0 0; height: 45%; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.45)); pointer-events: none; }
+.project-card .project-thumb { transition: transform 0.35s ease; }
+.project-card:hover .project-thumb { transform: scale(1.05); }
+.project-card:hover .project-play { transform: translate(-50%, -50%) scale(1.18); background: rgba(31,91,255,0.9); box-shadow: 0 8px 24px rgba(31,91,255,0.5); }
+.project-card .project-play { transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease; }
 .project-thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; display: block; }
 .project-thumb-fallback { display: flex; align-items: center; justify-content: center; font-size: 32px; background: var(--surface2); color: var(--muted); }
 .project-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; }

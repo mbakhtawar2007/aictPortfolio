@@ -601,3 +601,33 @@ test('admin nav (2026-10-31): Projects tab brought back so admins can link YouTu
   assert.match(admin, /VISIBLE_TAB_IDS: Tab\[\] = \['overview', 'members', 'users', 'media', 'projects'\]/, 'Projects must be a visible admin tab');
   assert.match(admin, /tab === 'projects'/, 'Projects panel must exist for the tab');
 });
+
+test('YouTube project thumbnails (2026-10-31): youtu.be / watch / shorts links get an i.ytimg.com still, not the grey placeholder', () => {
+  const vt = read('lib/videoThumb.ts');
+  assert.match(vt, /export function youtubeThumbnailUrl/, 'a YouTube thumbnail helper must exist');
+  assert.match(vt, /i\.ytimg\.com\/vi\//, 'thumbnails must come from i.ytimg.com');
+  assert.match(vt, /hqdefault\.jpg/, 'hqdefault must be used (maxres does not exist for every video)');
+  assert.match(vt, /projectThumbnail.*youtubeThumbnailUrl/s, 'projectThumbnail must fall back to the YouTube still when there is no cover or Cloudinary thumb');
+  const detail = read('app/projects/[slug]/detail.tsx');
+  assert.match(detail, /youtubeEmbedUrl\(p\.video_url\)/, 'detail page must embed YouTube videos in-site instead of linking out only');
+  assert.match(detail, /<iframe src=\{ytEmbed\}/, 'detail page must render an iframe player for YouTube links');
+  assert.match(detail, /aspectRatio: p\.video_format === 'short' \? '9 \/ 16' : '16 \/ 9'/, 'Shorts must play in a tall frame, full-length in 16:9');
+});
+
+test('video cards attractive (2026-10-31): thumbnail zoom, gradient, play button grows on hover', () => {
+  const css = read('styles/globals.css');
+  assert.match(css, /\.project-card:hover \.project-thumb \{ transform: scale\(1\.05\)/, 'card thumbnail must zoom on hover');
+  assert.match(css, /\.project-card:hover \.project-play \{ transform: translate\(-50%, -50%\) scale\(1\.18\)/, 'play button must grow on hover');
+  assert.match(css, /\.project-thumb-wrap::after/, 'thumbnail must carry a bottom gradient so the play button reads on bright frames');
+  const vt = read('lib/videoThumb.ts');
+  assert.match(vt, /export function youtubeEmbedUrl/, 'an embed-URL helper must exist');
+  assert.match(vt, /youtube\.com\/embed\//, 'embed URL must use the youtube-nocookie-free embed host path');
+});
+
+test('project detail storyline (2026-10-31): pasted \\n / \\. escapes render as paragraphs, not a literal wall', () => {
+  const detail = read('app/projects/[slug]/detail.tsx');
+  assert.match(detail, /cleanText/, 'detail page must clean pasted text before rendering');
+  assert.match(detail, /storyParas/, 'storyline must split into paragraphs');
+  assert.match(detail, /whiteSpace: 'pre-line'/, 'paragraphs must preserve single line breaks');
+  assert.ok(!/\{p\.case_study\}/.test(detail.replace(/storyParas/g, '')), 'case_study must not render raw anymore');
+});

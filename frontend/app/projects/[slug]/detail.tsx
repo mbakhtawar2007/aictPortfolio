@@ -4,7 +4,7 @@ import { apiGet } from '../../../lib/api';
 import { safeHref, safeSrc } from '../../../lib/safeUrl';
 import type { Project, Member } from '../../../lib/types';
 import { SkeletonGrid, Lightbox } from '../../../components/ui';
-import { projectThumbnail } from '../../../lib/videoThumb';
+import { projectThumbnail, youtubeEmbedUrl } from '../../../lib/videoThumb';
 export default function ProjectDetail({ slug }: { slug: string }) {
   const [p, setP] = useState<Project | null>(null); const [members, setMembers] = useState<Member[]>([]);
   const [all, setAll] = useState<Project[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
@@ -39,13 +39,20 @@ export default function ProjectDetail({ slug }: { slug: string }) {
   const roleOf = (id: string) => (p.project_members || []).find((x) => x.member_id === id)?.role_in_project || '';
   const related = all.filter((x) => x.id !== p.id && x.category === p.category).slice(0, 3);
   const thumb = projectThumbnail(p);
+  const ytEmbed = youtubeEmbedUrl(p.video_url);
+  // Pasted case studies sometimes arrive double-escaped (literal \n and \.
+  // sequences instead of line breaks, e.g. when text is copied through a
+  // JSON-shaped paste). Unescape at render time so old records read as
+  // paragraphs without touching stored data.
+  const cleanText = (t?: string) => (t || '').replace(/\\\r?\n/g, '\n').replace(/\\n/g, '\n').replace(/\\([\s\S])/g, '$1');
+  const storyParas = cleanText(p.case_study).split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
   return (<div>
-    {safeSrc(p.video_url) ? (/\.(mp4|webm)([?#]|$)/i.test(safeSrc(p.video_url)!.split(/[?#]/)[0]) ? (<video controls preload="metadata" aria-label={`${p.title} video`} poster={thumb || undefined} src={safeSrc(p.video_url)} style={{ width: '100%', maxHeight: 420, borderRadius: 20 }} />) : (<p><a className="btn" href={safeHref(p.video_url)} target="_blank" rel="noreferrer">Watch video</a></p>)) : (safeSrc(p.cover_url) ? <img className="blur-up" src={safeSrc(p.cover_url)} alt={`${p.title} cover`} tabIndex={0} role="button" aria-label={`Open ${p.title} cover`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLb(0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLb(0); } }} /> : null)}
+    {safeSrc(p.video_url) ? (/\.(mp4|webm)([?#]|$)/i.test(safeSrc(p.video_url)!.split(/[?#]/)[0]) ? (<video controls preload="metadata" aria-label={`${p.title} video`} poster={thumb || undefined} src={safeSrc(p.video_url)} style={{ width: '100%', maxHeight: 420, borderRadius: 20 }} />) : (ytEmbed ? (<div><div style={{ position: 'relative', width: '100%', maxWidth: p.video_format === 'short' ? 400 : '100%', margin: p.video_format === 'short' ? '0 auto' : undefined, aspectRatio: p.video_format === 'short' ? '9 / 16' : '16 / 9' }}><iframe src={ytEmbed} title={`${p.title} video`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, borderRadius: 20 }} /></div><p><a href={safeHref(p.video_url)} target="_blank" rel="noreferrer">Watch on YouTube</a></p></div>) : (<div>{thumb && <a href={safeHref(p.video_url)} target="_blank" rel="noreferrer"><img className="blur-up" src={thumb} alt={`${p.title} thumbnail`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20 }} /></a>}<p><a className="btn" href={safeHref(p.video_url)} target="_blank" rel="noreferrer">Watch video</a></p></div>))) : (safeSrc(p.cover_url) ? <img className="blur-up" src={safeSrc(p.cover_url)} alt={`${p.title} cover`} tabIndex={0} role="button" aria-label={`Open ${p.title} cover`} style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLb(0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLb(0); } }} /> : null)}
     <h1>{p.title}</h1>
     <p className="muted">{p.category} {p.year ? `· ${p.year}` : ''} {p.featured ? '· Featured' : ''}{p.video_format === 'short' ? ' · Shorts' : p.video_format === 'full' ? ' · Full-length video' : ''}{p.visibility && p.visibility !== 'public' ? ` · ${p.visibility === 'unlisted' ? 'Unlisted' : 'Private'}` : ''}</p>
-    <p>{p.tagline}</p><p>{p.description}</p>
-    {p.video_url && thumb && !p.cover_url && <p className="muted">Thumbnail: first frame of the uploaded video.</p>}
-    {p.category === 'AI Video' ? (<><h2>Storyline &amp; plot</h2>{p.case_study ? <p>{p.case_study}</p> : <p className="muted">No storyline published yet.</p>}</>) : (p.case_study ? <><h2>Case study</h2><p>{p.case_study}</p></> : null)}
+    <p>{p.tagline}</p><p style={{ whiteSpace: 'pre-line' }}>{cleanText(p.description)}</p>
+    {p.video_url && thumb && !p.cover_url && !ytEmbed && <p className="muted">Thumbnail: first frame of the uploaded video.</p>}
+    {p.category === 'AI Video' ? (<><h2>Storyline &amp; plot</h2>{storyParas.length ? storyParas.map((para, i) => (<p key={i} style={{ whiteSpace: 'pre-line' }}>{para}</p>)) : <p className="muted">No storyline published yet.</p>}</>) : (storyParas.length ? <><h2>Case study</h2>{storyParas.map((para, i) => (<p key={i} style={{ whiteSpace: 'pre-line' }}>{para}</p>))}</> : null)}
     <h2>Characters involved</h2><p>{(p.characters || []).map((c) => <span className="chip" key={c}>{c}</span>)}{!(p.characters || []).length && <span className="muted">No characters listed yet.</span>}</p>
     <h2>Technology</h2><p>{(p.tech_stack || []).map((t) => <span className="chip" key={t}>{t}</span>)}{(p.tools_used || []).map((t) => <span className="chip" key={t}>{t}</span>)}{!(p.tech_stack || []).length && !(p.tools_used || []).length && <span className="muted">No technologies listed.</span>}</p>
     {(p.tags || []).length ? (<><h2>Tags</h2><p>{(p.tags || []).map((t) => <span className="chip" key={t}>{t}</span>)}</p></>) : null}

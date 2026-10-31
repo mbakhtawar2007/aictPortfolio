@@ -25,12 +25,21 @@ export function titleFromVideoFile(fileName: string, title: string): string {
   return base.slice(0, 300) || 'Untitled video';
 }
 
+// Comma-separated form values -> arrays, the rule the Uploads forms use
+// for Characters and Technology (also used by the project form).
+export function splitCsv(v: string): string[] {
+  return v.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 export async function createVideoProject(input: {
   title: string;
   description: string;
   videoUrl: string;
   fileName: string;
-  memberId?: string;
+  caseStudy?: string;
+  characters?: string[];
+  techStack?: string[];
+  memberIds?: string[];
 }): Promise<{ data: Project | null; error: string | null }> {
   const title = titleFromVideoFile(input.fileName, input.title);
   const description = (input.description || '').trim();
@@ -46,10 +55,17 @@ export async function createVideoProject(input: {
       category: 'AI Video',
       video_url: input.videoUrl,
       cover_url: videoThumbnailUrl(input.videoUrl) || '',
+      // Optional details asked for in the Uploads form (2026-10-31): they
+      // land on the project details page instead of its empty states.
+      // Slices keep the backend's limits (case_study 20000, each
+      // character 200) so a long entry cannot fail the whole card.
+      case_study: (input.caseStudy || '').trim().slice(0, 20000),
+      characters: (input.characters || []).map((c) => c.trim().slice(0, 200)).filter(Boolean),
+      tech_stack: (input.techStack || []).map((s) => s.trim()).filter(Boolean),
       // Members are forced to 'draft' by the backend; admins stay published.
       status: 'published',
-      member_ids: input.memberId ? [input.memberId] : [],
-      project_members: input.memberId ? [{ member_id: input.memberId, role_in_project: '' }] : [],
+      member_ids: input.memberIds || [],
+      project_members: (input.memberIds || []).map((member_id) => ({ member_id, role_in_project: '' })),
     }, true);
     if (!r.error && r.data) return { data: r.data, error: null };
     lastError = r.error?.message || lastError;

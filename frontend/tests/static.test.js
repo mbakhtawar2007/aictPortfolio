@@ -306,3 +306,30 @@ test('dropdown options are readable in dark theme (2026-10-31 Uploads screenshot
   assert.match(css, /color-scheme: light/, 'light theme must tell the browser to render native controls light');
   assert.match(css, /select option \{ background-color: var\(--bg\); color: var\(--text\); \}/, 'options must carry explicit background + text colours, not inherit translucent select colours');
 });
+
+test('video upload form asks for storyline, characters, technology and team (2026-10-31)', () => {
+  const helper = read('lib/videoProject.ts');
+  assert.match(helper, /export function splitCsv/, 'comma-separated values share one split rule');
+  assert.match(helper, /case_study:/, 'upload storyline is sent as case_study');
+  assert.match(helper, /characters:/, 'upload characters are sent as characters');
+  assert.match(helper, /tech_stack:/, 'upload technology is sent as tech_stack');
+  assert.match(helper, /member_ids:/, 'selected members are sent as member_ids');
+  assert.match(helper, /project_members:/, 'selected members are sent as project_members');
+  assert.ok(!/memberId\?:/.test(helper), 'the old single-memberId path is gone (both call sites use memberIds)');
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const page = read(f);
+    assert.match(page, /Storyline & plot/, f + ' asks for storyline');
+    assert.match(page, /Characters involved/, f + ' asks for characters');
+    assert.match(page, /Technology/, f + ' asks for technology');
+    assert.match(page, /setUploadStoryline\(''\)/, f + ' clears storyline on successful upload');
+    assert.match(page, /setUploadCharacters\(''\)/, f + ' clears characters on successful upload');
+    assert.match(page, /setUploadTechnology\(''\)/, f + ' clears technology on successful upload');
+  }
+  const admin = read('app/admin/page.tsx');
+  assert.match(admin, /Team & group members/, 'admin upload form offers team selection');
+  assert.match(admin, /uploadTeam/, 'admin upload form tracks selected members');
+  assert.match(admin, /type="checkbox"/, 'admin team selection uses checkboxes');
+  const member = read('app/member/page.tsx');
+  assert.ok(!/uploadTeam/.test(member), 'member upload form must not offer other members (backend strips them anyway)');
+  assert.ok(!/Team & group members/.test(member), 'member upload form has no team selection');
+});

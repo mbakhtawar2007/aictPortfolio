@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { checkVerifyAsset } from '../src/verifyAsset.js';
+import { store } from '../src/store.js';
 
 let server; let base;
 before(async () => {
@@ -311,4 +312,19 @@ test('project characters: created and returned on the public project (2026-10-31
   const pub = await call('GET', `/api/projects/${slug}`);
   assert.equal(pub.status, 200);
   assert.deepEqual(pub.json.data.characters, ['Narrator', 'Host']);
+});
+
+test('admin can link their OWN account to a profile, but cannot change own role/status (2026-10-31)', async () => {
+  // Demo mode has no role rows by default, so PATCH would 404 before the
+  // self-link rule is even reached — seed the row the route looks up.
+  await store.saveRole('demo-admin', { role: 'admin', account_status: 'active', email: 'demo-admin@example.local', member_id: '' });
+  const linked = await call('PATCH', '/api/admin/users/demo-admin', ADMIN, { member_id: 'sample-member-2' });
+  assert.equal(linked.status, 200);
+  assert.equal(linked.json.data.member_id, 'sample-member-2');
+  assert.equal((await call('PATCH', '/api/admin/users/demo-admin', ADMIN, { role: 'member' })).status, 403);
+  assert.equal((await call('PATCH', '/api/admin/users/demo-admin', ADMIN, { account_status: 'deactivated' })).status, 403);
+  const unlinked = await call('PATCH', '/api/admin/users/demo-admin', ADMIN, { member_id: '' });
+  assert.equal(unlinked.status, 200);
+  assert.equal(unlinked.json.data.member_id, '');
+  await store.deleteRole('demo-admin');
 });

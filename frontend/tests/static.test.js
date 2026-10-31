@@ -333,3 +333,10 @@ test('video upload form asks for storyline, characters, technology and team (202
   assert.ok(!/uploadTeam/.test(member), 'member upload form must not offer other members (backend strips them anyway)');
   assert.ok(!/Team & group members/.test(member), 'member upload form has no team selection');
 });
+
+test('own account link: users tab says role/status are refused but own profile linking is allowed (2026-10-31)', () => {
+  const admin = read('app/admin/page.tsx');
+  assert.match(admin, /cannot change your own role or status/, 'users tab note must match the new backend rule');
+  assert.ok(!/cannot change your own account from this page/.test(admin), 'old blanket self-change note must be gone');
+  assert.match(admin, /Profile linked to \$\{next\.full_name\}/, 'Save link message must name the newly selected profile, not the old one');
+});

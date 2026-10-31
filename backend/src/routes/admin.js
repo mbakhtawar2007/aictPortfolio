@@ -400,7 +400,15 @@ adminRouter.post('/users/:id/set-password', requireAdmin(async (req, res) => {
   } catch { return fail(res, 503, 'unavailable', 'Password could not be set.'); }
 }));
 adminRouter.patch('/users/:id', requireAdmin(async (req, res) => {
-  if (req.params.id === req.actor.uid) return fail(res, 403, 'forbidden', 'You cannot change your own account this way.');
+  // Self-link fix (2026-10-31): an admin must be able to link their OWN
+  // account to a team profile (e.g. so their published profile shows on
+  // /team like other members) — previously the blanket self-change ban
+  // refused Save link for their own account, so the dropdown reset on
+  // every refresh and the link could never persist. Only member_id is
+  // allowed for self: changing your own role or status (self-demotion,
+  // self-deactivation lockout) is still refused.
+  const p0 = parseBody(userPatchSchema, req.body);
+  if (req.params.id === req.actor.uid && p0.ok && (p0.data.role !== undefined || p0.data.account_status !== undefined)) return fail(res, 403, 'forbidden', 'You cannot change your own role or status, but you can link your own profile.');
   // Audit fix (data-integrity review): previously a typo'd UID created an
   // orphan role row with no Firebase Auth user behind it.
   const existingUser = await store.roleByUid(req.params.id);

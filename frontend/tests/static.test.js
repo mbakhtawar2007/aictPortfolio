@@ -340,3 +340,14 @@ test('own account link: users tab says role/status are refused but own profile l
   assert.ok(!/cannot change your own account from this page/.test(admin), 'old blanket self-change note must be gone');
   assert.match(admin, /Profile linked to \$\{next\.full_name\}/, 'Save link message must name the newly selected profile, not the old one');
 });
+
+test('upload cards have an Edit button that saves title/description via media/meta (2026-10-31)', () => {
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const src = read(f);
+    assert.match(src, /setEditingMedia\(f\)/, f + ' media card must open the edit form');
+    assert.match(src, /Edit upload details/, f + ' must render the edit modal');
+    assert.match(src, /apiSend\('\/admin\/media\/meta', 'POST'/, f + ' must save through the existing media/meta endpoint');
+    assert.match(src, /maxLength=\{120\}/, f + ' title must keep the 120-char limit');
+    assert.match(src, /maxLength=\{500\}/, f + ' description must keep the 500-char limit');
+  }
+});

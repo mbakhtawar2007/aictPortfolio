@@ -138,7 +138,7 @@ export const store = {
   async rolesAll() { if (isFirebase()) { const s = await db().collection('user_roles').get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); } return demoStore().roles; },
   async deleteRole(uid) { if (isFirebase()) { await db().collection('user_roles').doc(uid).delete(); return; } const d = demoStore(); d.roles = d.roles.filter((r) => r.id !== uid && r.uid !== uid); },
   async roleByUid(uid) { if (isFirebase()) { const s = await db().collection('user_roles').doc(uid).get(); return s.exists ? { id: s.id, ...s.data() } : null; } return demoStore().roles.find((r) => r.id === uid || r.uid === uid) || null; },
-  async roleByEmail(email) { const all = await this.rolesAll(); return all.find((r) => r.email === email) || null; },
+  async roleByEmail(email) { const all = await this.rolesAll(); const want = String(email || '').toLowerCase(); return all.find((r) => String(r.email || '').toLowerCase() === want) || null; },
   async saveRole(uid, v) { if (isFirebase()) { await db().collection('user_roles').doc(uid).set({ ...v, uid }, { merge: true }); return { id: uid, ...v }; } const d = demoStore(); const ex = d.roles.find((r) => r.id === uid); if (ex) Object.assign(ex, v); else { const row = { id: uid, uid, ...v }; d.roles.push(row); return row; } return ex; },
   async addAudit(row) { if (isFirebase()) { await db().collection('audit_log').add(row); return; } demoStore().audit.push(row); },
   // Invite-link tokens (2026-10-29): the plaintext token is NEVER stored
@@ -161,6 +161,36 @@ export const store = {
   async markInviteUsed(id) {
     if (isFirebase()) { await db().collection('invites').doc(id).set({ used: true, used_at: new Date().toISOString() }, { merge: true }); return; }
     const ex = demoStore().invites.find((i) => i.id === id); if (ex) { ex.used = true; ex.used_at = new Date().toISOString(); }
+  },
+  // Atomic single-use claim (audit fix): a Firestore transaction
+  // re-checks used/revoked/expired inside the transaction and flips
+  // used=true in the same step, so two concurrent accepts cannot both
+  // pass the check-then-act window that markInviteUsed left open.
+  // Returns { ok: true, invite } or { ok: false }.
+  async claimInvite(id) {
+    if (isFirebase()) {
+      const ref = db().collection('invites').doc(id);
+      return db().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return { ok: false };
+        const inv = { id: snap.id, ...snap.data() };
+        if (inv.used || inv.revoked) return { ok: false };
+        if (inv.expires_at && new Date(inv.expires_at).getTime() < Date.now()) return { ok: false };
+        tx.set(ref, { used: true, used_at: new Date().toISOString() }, { merge: true });
+        return { ok: true, invite: inv };
+      });
+    }
+    const ex = demoStore().invites.find((i) => i.id === id);
+    if (!ex || ex.used || ex.revoked) return { ok: false };
+    if (ex.expires_at && new Date(ex.expires_at).getTime() < Date.now()) return { ok: false };
+    ex.used = true; ex.used_at = new Date().toISOString();
+    return { ok: true, invite: ex };
+  },
+  // Best-effort release of a claim when account creation fails after
+  // the claim, so the same link can be retried instead of being lost.
+  async releaseInvite(id) {
+    if (isFirebase()) { await db().collection('invites').doc(id).set({ used: false }, { merge: true }); return; }
+    const ex = demoStore().invites.find((i) => i.id === id); if (ex) ex.used = false;
   },
   async markInviteRevoked(id) {
     if (isFirebase()) { await db().collection('invites').doc(id).set({ revoked: true, revoked_at: new Date().toISOString() }, { merge: true }); return; }

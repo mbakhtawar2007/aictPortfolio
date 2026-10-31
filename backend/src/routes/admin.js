@@ -1,10 +1,12 @@
 import express from 'express';
-import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, userPatchSchema, uploadSignSchema, mediaMetaSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema } from '../validate.js';
+import { ok, fail, parseBody, memberSchema, projectSchema, achievementSchema, siteSchema, userPatchSchema, uploadSignSchema, mediaMetaSchema, messagePatchSchema, setPasswordSchema, inviteLinkSchema, oneLine } from '../validate.js';
 import { store, isFirebase } from '../store.js';
-import { authAdmin, firebaseEnabled, demoMode } from '../firebase.js';
+import { authAdmin } from '../firebase.js';
 import { requireAdmin, requireMemberOrAdmin, canEditMember, canEditProject } from '../auth.js';
-import { audit } from '../audit.js';
+import { audit, auditFailedFlag } from '../audit.js';
 import { checkVerifyAsset } from '../verifyAsset.js';
+import { assetOwnerUid, isPortfolioAsset, isOwnAsset } from '../ownership.js';
+import { actorRateLimit } from '../rateLimit.js';
 import crypto from 'crypto';
 export const adminRouter = express.Router();
 // NOTE: this router is mounted at /api/admin, so paths below are relative.
@@ -52,7 +54,7 @@ adminRouter.post('/members', requireMemberOrAdmin(async (req, res) => {
     const linked = await store.memberById(req.actor.member_id);
     if (linked) return fail(res, 403, 'forbidden', 'You already have a profile. Edit it instead of creating a new one.');
   }
-  const data = isSelfCreate ? { ...p.data, status: 'draft', is_leader: false } : p.data;
+  const data = isSelfCreate ? { ...p.data, status: 'draft', is_leader: false, sort_order: 0 } : p.data;
   if (await slugTaken('members', data.slug, '')) return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.');
   try {
     const row = await store.saveMember('', data);
@@ -60,12 +62,9 @@ adminRouter.post('/members', requireMemberOrAdmin(async (req, res) => {
     // roll the just-created record back instead of leaving a duplicate.
     if (!(await store.reserveSlug('members', data.slug, row.id))) { await store.deleteMember(row.id); return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.'); }
     if (data.is_leader) await clearOtherLeaders(row.id);
-    await audit(store, { user_id: req.actor.uid, action: 'member.create', entity: 'members', entity_id: row.id });
-    if (isSelfCreate) {
-      await store.saveRole(req.actor.uid, { member_id: row.id });
-      await audit(store, { user_id: req.actor.uid, action: 'user.link_profile', entity: 'user_roles', entity_id: req.actor.uid });
-    }
-    return ok(res, row, 201);
+    const memberAudit = await audit(store, { user_id: req.actor.uid, action: 'member.create', entity: 'members', entity_id: row.id });
+    if (isSelfCreate) { await store.saveRole(req.actor.uid, { member_id: row.id }); await audit(store, { user_id: req.actor.uid, action: 'user.link_profile', entity: 'user_roles', entity_id: req.actor.uid }); return ok(res, { ...row, ...auditFailedFlag(memberAudit) }, 201); }
+    return ok(res, { ...row, ...auditFailedFlag(memberAudit) }, 201);
   } catch { return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
 }));
 adminRouter.patch('/members/:id', requireMemberOrAdmin(async (req, res) => {
@@ -79,17 +78,21 @@ adminRouter.patch('/members/:id', requireMemberOrAdmin(async (req, res) => {
   // existing status for member edits; only admins change it.
   if (req.actor.role === 'member') delete p.data.status;
   if (req.actor.role === 'member') delete p.data.is_leader;
+  if (req.actor.role === 'member') delete p.data.sort_order;
   if (p.data.slug && await slugTaken('members', p.data.slug, req.params.id)) return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.');
   const existing = await store.memberById(req.params.id);
   if (!existing) return fail(res, 404, 'not_found', 'Member not found.');
-  if (p.data.slug && p.data.slug !== existing.slug) {
+  // Reserve the new slug first, but release the old slug only after
+  // a successful save: releasing before the save leaked the new
+  // reservation and lost the old one when the save threw.
+  const slugChanged = p.data.slug && p.data.slug !== existing.slug;
+  if (slugChanged) {
     if (!(await store.reserveSlug('members', p.data.slug, req.params.id))) return fail(res, 409, 'slug_taken', 'Another member already uses this web address (slug). Choose a different one.');
-    await store.releaseSlug('members', existing.slug, req.params.id);
   }
   try { const ex = await store.memberById(req.params.id); if (ex) await store.addRevision({ entity: 'members', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); } catch { /* revision failure must not block the save */ }
-  try { await store.saveMember(req.params.id, p.data); if (p.data.is_leader) await clearOtherLeaders(req.params.id); const row = await store.memberById(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'member.update', entity: 'members', entity_id: req.params.id }); return ok(res, row); } catch { return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
+  try { await store.saveMember(req.params.id, p.data); if (slugChanged) await store.releaseSlug('members', existing.slug, req.params.id); if (p.data.is_leader) await clearOtherLeaders(req.params.id); const row = await store.memberById(req.params.id); const memberAudit = await audit(store, { user_id: req.actor.uid, action: 'member.update', entity: 'members', entity_id: req.params.id }); return ok(res, { ...row, ...auditFailedFlag(memberAudit) }); } catch { if (slugChanged) await store.releaseSlug('members', p.data.slug, req.params.id); return fail(res, 503, 'unavailable', 'Member could not be saved.'); }
 }));
-adminRouter.delete('/members/:id', requireAdmin(async (req, res) => { try { const ex = await store.memberById(req.params.id); if (ex) await store.addRevision({ entity: 'members', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteMember(req.params.id); if (ex.slug) await store.releaseSlug('members', ex.slug, req.params.id); await audit(store, { user_id: req.actor.uid, action: 'member.delete', entity: 'members', entity_id: req.params.id }); return ok(res, { deleted: true }); } catch { return fail(res, 503, 'unavailable', 'Member could not be deleted.'); } }));
+adminRouter.delete('/members/:id', requireAdmin(async (req, res) => { try { const ex = await store.memberById(req.params.id); if (!ex) return fail(res, 404, 'not_found', 'Member not found.'); await store.addRevision({ entity: 'members', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteMember(req.params.id); if (ex.slug) await store.releaseSlug('members', ex.slug, req.params.id); const memberAudit = await audit(store, { user_id: req.actor.uid, action: 'member.delete', entity: 'members', entity_id: req.params.id }); return ok(res, { deleted: true, ...auditFailedFlag(memberAudit) }); } catch { return fail(res, 503, 'unavailable', 'Member could not be deleted.'); } }));
 adminRouter.get('/projects', requireMemberOrAdmin(async (req, res) => {
   try { const all = await store.projectsAll(); const list = req.actor.role === 'admin' ? all : (req.actor.member_id ? all.filter((p) => (p.member_ids || []).includes(req.actor.member_id)) : []); return ok(res, list); } catch { return fail(res, 503, 'unavailable', 'Projects are temporarily unavailable.'); }
 }));
@@ -106,10 +109,10 @@ adminRouter.post('/projects', requireMemberOrAdmin(async (req, res) => {
   if (p.data.visibility === 'private') p.data.status = 'draft';
   // Audit fix 2026-10-29 (security review): a member must not attach other
   // members to a project on create — that would grant them edit rights.
-  if (req.actor.role === 'member') { p.data.member_ids = req.actor.member_id ? [req.actor.member_id] : []; p.data.project_members = (p.data.project_members || []).filter((x) => x.member_id === req.actor.member_id); }
+  if (req.actor.role === 'member') { p.data.member_ids = req.actor.member_id ? [req.actor.member_id] : []; p.data.project_members = (p.data.project_members || []).filter((x) => x.member_id === req.actor.member_id); p.data.featured = false; p.data.sort_order = 0; }
   if (p.data.year === null) delete p.data.year;
   if (await slugTaken('projects', p.data.slug, '')) return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.');
-  try { const row = await store.saveProject('', p.data); if (!(await store.reserveSlug('projects', p.data.slug, row.id))) { await store.deleteProject(row.id); return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.'); } await audit(store, { user_id: req.actor.uid, action: 'project.create', entity: 'projects', entity_id: row.id }); return ok(res, row, 201); } catch { return fail(res, 503, 'unavailable', 'Project could not be saved.'); }
+  try { const row = await store.saveProject('', p.data); if (!(await store.reserveSlug('projects', p.data.slug, row.id))) { await store.deleteProject(row.id); return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.'); } const projectAudit = await audit(store, { user_id: req.actor.uid, action: 'project.create', entity: 'projects', entity_id: row.id }); return ok(res, { ...row, ...auditFailedFlag(projectAudit) }, 201); } catch { return fail(res, 503, 'unavailable', 'Project could not be saved.'); }
 }));
 adminRouter.patch('/projects/:id', requireMemberOrAdmin(async (req, res) => {
   try {
@@ -124,7 +127,7 @@ adminRouter.patch('/projects/:id', requireMemberOrAdmin(async (req, res) => {
     // Audit fix 2026-10-29: members keep the existing status and membership
     // list when editing an assigned project; only admins publish/unpublish
     // or change who is assigned.
-    if (req.actor.role === 'member') { delete p.data.status; delete p.data.member_ids; delete p.data.project_members; }
+    if (req.actor.role === 'member') { delete p.data.status; delete p.data.member_ids; delete p.data.project_members; delete p.data.featured; delete p.data.sort_order; delete p.data.visibility; }
     if (p.data.visibility === 'private') p.data.status = 'draft';
     if (req.actor.role === 'member' && (p.data.video_url || p.data.category === 'AI Video') && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
     if (p.data.slug && await slugTaken('projects', p.data.slug, req.params.id)) return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.');
@@ -132,24 +135,24 @@ adminRouter.patch('/projects/:id', requireMemberOrAdmin(async (req, res) => {
     // are untouched (partial schema + merge), so clearing year cannot
     // accidentally clear anything else.
     const clearYear = p.data.year === null; if (clearYear) delete p.data.year;
-    if (p.data.slug && p.data.slug !== ex.slug) {
+    const projectSlugChanged = p.data.slug && p.data.slug !== ex.slug;
+    if (projectSlugChanged) {
       if (!(await store.reserveSlug('projects', p.data.slug, req.params.id))) return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.');
-      await store.releaseSlug('projects', ex.slug, req.params.id);
     }
     try { await store.addRevision({ entity: 'projects', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); } catch { /* revision failure must not block the save */ }
-    await store.saveProject(req.params.id, p.data); if (clearYear) await store.deleteProjectField(req.params.id, 'year'); const row = (await store.projectsAll()).find((x) => x.id === req.params.id); await audit(store, { user_id: req.actor.uid, action: 'project.update', entity: 'projects', entity_id: req.params.id }); return ok(res, row);
+    try { await store.saveProject(req.params.id, p.data); if (projectSlugChanged) await store.releaseSlug('projects', ex.slug, req.params.id); if (clearYear) await store.deleteProjectField(req.params.id, 'year'); const row = (await store.projectsAll()).find((x) => x.id === req.params.id); const projectAudit = await audit(store, { user_id: req.actor.uid, action: 'project.update', entity: 'projects', entity_id: req.params.id }); return ok(res, { ...row, ...auditFailedFlag(projectAudit) }); } catch { if (projectSlugChanged) await store.releaseSlug('projects', p.data.slug, req.params.id); throw new Error('project save failed'); }
   } catch { return fail(res, 503, 'unavailable', 'Project could not be saved.'); }
 }));
-adminRouter.delete('/projects/:id', requireMemberOrAdmin(async (req, res) => { try { const all = await store.projectsAll(); const ex = all.find((p) => p.id === req.params.id); if (req.actor.role === 'member' && (!ex || !canEditProject(req.actor, ex))) return fail(res, 404, 'not_found', 'Project not found.'); if (req.actor.role === 'member' && ex.status !== 'draft') return fail(res, 403, 'forbidden', 'Only your own draft projects can be deleted by you. Ask an admin about published ones.'); if (ex) await store.addRevision({ entity: 'projects', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteProject(req.params.id); if (ex.slug) await store.releaseSlug('projects', ex.slug, req.params.id); await audit(store, { user_id: req.actor.uid, action: 'project.delete', entity: 'projects', entity_id: req.params.id }); return ok(res, { deleted: true }); } catch { return fail(res, 503, 'unavailable', 'Project could not be deleted.'); } }));
+adminRouter.delete('/projects/:id', requireMemberOrAdmin(async (req, res) => { try { const all = await store.projectsAll(); const ex = all.find((p) => p.id === req.params.id); if (!ex) return fail(res, 404, 'not_found', 'Project not found.'); if (req.actor.role === 'member' && !canEditProject(req.actor, ex)) return fail(res, 404, 'not_found', 'Project not found.'); if (req.actor.role === 'member' && ex.status !== 'draft') return fail(res, 403, 'forbidden', 'Only your own draft projects can be deleted by you. Ask an admin about published ones.'); await store.addRevision({ entity: 'projects', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteProject(req.params.id); if (ex.slug) await store.releaseSlug('projects', ex.slug, req.params.id); const projectAudit = await audit(store, { user_id: req.actor.uid, action: 'project.delete', entity: 'projects', entity_id: req.params.id }); return ok(res, { deleted: true, ...auditFailedFlag(projectAudit) }); } catch { return fail(res, 503, 'unavailable', 'Project could not be deleted.'); } }));
 adminRouter.post('/achievements', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(achievementSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
   if (req.actor.role === 'member' && p.data.member_id && !canEditMember(req.actor, p.data.member_id)) return fail(res, 403, 'forbidden', 'You can add achievements only to your own profile.');
   if (req.actor.role === 'member' && !p.data.member_id) p.data.member_id = req.actor.member_id;
   // BUG-10: member-created achievements are drafts until an admin publishes.
-  if (req.actor.role === 'member') p.data.status = 'draft';
+  if (req.actor.role === 'member') { p.data.status = 'draft'; p.data.featured = false; }
   // BUG-20: a profile-less member must not create ambiguously owned content.
   if (req.actor.role === 'member' && !req.actor.member_id) return fail(res, 403, 'forbidden', 'Create your team profile first, then add achievements.');
-  try { const row = await store.saveAchievement('', p.data); await audit(store, { user_id: req.actor.uid, action: 'achievement.create', entity: 'achievements', entity_id: row.id }); return ok(res, row, 201); } catch { return fail(res, 503, 'unavailable', 'Achievement could not be saved.'); }
+  try { const row = await store.saveAchievement('', p.data); const achAudit = await audit(store, { user_id: req.actor.uid, action: 'achievement.create', entity: 'achievements', entity_id: row.id }); return ok(res, { ...row, ...auditFailedFlag(achAudit) }, 201); } catch { return fail(res, 503, 'unavailable', 'Achievement could not be saved.'); }
 }));
 adminRouter.patch('/achievements/:id', requireMemberOrAdmin(async (req, res) => {
   try {
@@ -162,19 +165,21 @@ adminRouter.patch('/achievements/:id', requireMemberOrAdmin(async (req, res) => 
     if (req.actor.role === 'member') delete p.data.member_id;
     // BUG-10: members cannot change achievement status on PATCH either.
     if (req.actor.role === 'member') delete p.data.status;
+    if (req.actor.role === 'member') delete p.data.featured;
     try { await store.addRevision({ entity: 'achievements', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); } catch { /* revision failure must not block the save */ }
-    const row = await store.saveAchievement(req.params.id, p.data); await audit(store, { user_id: req.actor.uid, action: 'achievement.update', entity: 'achievements', entity_id: req.params.id }); return ok(res, row);
+    const row = await store.saveAchievement(req.params.id, p.data); const achAudit = await audit(store, { user_id: req.actor.uid, action: 'achievement.update', entity: 'achievements', entity_id: req.params.id }); return ok(res, { ...row, ...auditFailedFlag(achAudit) });
   } catch { return fail(res, 503, 'unavailable', 'Achievement could not be saved.'); }
 }));
-adminRouter.delete('/achievements/:id', requireMemberOrAdmin(async (req, res) => { try { const all = await store.achievementsAll(); const ex = all.find((a) => a.id === req.params.id); if (req.actor.role === 'member' && (!ex || ex.member_id !== req.actor.member_id)) return fail(res, 404, 'not_found', 'Achievement not found.'); if (req.actor.role === 'member' && ex.status !== 'draft') return fail(res, 403, 'forbidden', 'Only your own draft achievements can be deleted by you. Ask an admin about published ones.'); if (ex) await store.addRevision({ entity: 'achievements', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteAchievement(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'achievement.delete', entity: 'achievements', entity_id: req.params.id }); return ok(res, { deleted: true }); } catch { return fail(res, 503, 'unavailable', 'Achievement could not be deleted.'); } }));
+adminRouter.delete('/achievements/:id', requireMemberOrAdmin(async (req, res) => { try { const all = await store.achievementsAll(); const ex = all.find((a) => a.id === req.params.id); if (!ex) return fail(res, 404, 'not_found', 'Achievement not found.'); if (req.actor.role === 'member' && ex.member_id !== req.actor.member_id) return fail(res, 404, 'not_found', 'Achievement not found.'); if (req.actor.role === 'member' && ex.status !== 'draft') return fail(res, 403, 'forbidden', 'Only your own draft achievements can be deleted by you. Ask an admin about published ones.'); await store.addRevision({ entity: 'achievements', entity_id: req.params.id, snapshot: ex, created_at: new Date().toISOString(), user_id: req.actor.uid }); await store.deleteAchievement(req.params.id); const achAudit = await audit(store, { user_id: req.actor.uid, action: 'achievement.delete', entity: 'achievements', entity_id: req.params.id }); return ok(res, { deleted: true, ...auditFailedFlag(achAudit) }); } catch { return fail(res, 503, 'unavailable', 'Achievement could not be deleted.'); } }));
 adminRouter.get('/settings', requireAdmin(async (req, res) => { try { return ok(res, await store.site()); } catch { return fail(res, 503, 'unavailable', 'Settings are temporarily unavailable.'); } }));
 adminRouter.patch('/settings', requireAdmin(async (req, res) => {
   const p = parseBody(siteSchema.partial(), req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  try { const before = await store.site(); if (before) await store.addRevision({ entity: 'site_settings', entity_id: 'main', snapshot: before, created_at: new Date().toISOString(), user_id: req.actor.uid }); const row = await store.saveSite(p.data); await audit(store, { user_id: req.actor.uid, action: 'settings.update', entity: 'site_settings', entity_id: 'main' }); return ok(res, row); } catch { return fail(res, 503, 'unavailable', 'Settings could not be saved.'); }
+  try { const before = await store.site(); if (before) await store.addRevision({ entity: 'site_settings', entity_id: 'main', snapshot: before, created_at: new Date().toISOString(), user_id: req.actor.uid }); const row = await store.saveSite(p.data); const settingsAudit = await audit(store, { user_id: req.actor.uid, action: 'settings.update', entity: 'site_settings', entity_id: 'main' }); return ok(res, { ...row, ...auditFailedFlag(settingsAudit) }); } catch { return fail(res, 503, 'unavailable', 'Settings could not be saved.'); }
 }));
 adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(uploadSignSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
   if (p.data.file_type === 'video' && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
+  if (!actorRateLimit(`upload-sign:${req.actor.uid}`, 100, 60 * 60 * 1000)) return fail(res, 429, 'rate_limited', 'Too many upload requests. Please try again later.');
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return fail(res, 503, 'upload_unavailable', 'File uploads are not configured.');
   const ext = p.data.file_name.split('.').pop()?.toLowerCase() || '';
@@ -214,8 +219,8 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
   const publicId = typeof body.public_id === 'string' ? body.public_id : '';
   const expected = body.file_type === 'video' ? 'video' : body.file_type === 'pdf' ? 'pdf' : 'image';
   if (expected === 'video' && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
-  if (!publicId.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be verified.');
-  if (req.actor.role !== 'admin' && !publicId.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can verify only your own uploads.');
+  if (!isPortfolioAsset(publicId)) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be verified.');
+  if (!isOwnAsset(req.actor, publicId)) return fail(res, 403, 'forbidden', 'You can verify only your own uploads.');
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return fail(res, 503, 'upload_unavailable', 'File uploads are not configured.');
   try {
@@ -224,7 +229,14 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
     const resourceType = expected === 'video' ? 'video' : expected === 'pdf' ? 'raw' : 'image';
     let asset;
     try { asset = await cloudinary.api.resource(publicId, { resource_type: resourceType }); }
-    catch { return fail(res, 404, 'not_found', 'No such uploaded asset was found.'); }
+    catch {
+      // Lookup failed under the claimed type, but the asset may exist
+      // under another type (e.g. a video claimed as an image). Remove
+      // it best-effort so a failed verify cannot leave an orphan that
+      // is later linked by pasting its URL.
+      for (const t of ['video', 'raw', 'image']) { if (t !== resourceType) { try { await cloudinary.uploader.destroy(publicId, { resource_type: t }); } catch { /* best effort */ } } }
+      return fail(res, 404, 'not_found', 'No such uploaded asset was found.');
+    }
     // Format rule lives in verifyAsset.js (unit-tested): for PDFs a missing
     // format no longer blocks a raw asset whose id/URL ends in .pdf — that
     // was the 2026-10-30 admin resume failure. The rejection message now
@@ -232,11 +244,12 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
     // diagnosable instead of another blind guess.
     const check = checkVerifyAsset(expected, asset, publicId);
     if (!check.ok) {
-      try { await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }); } catch { /* removal best effort */ }
+      let removed = false;
+      try { const d = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }); removed = d && (d.result === 'ok' || d.result === 'not found'); } catch { /* removal best effort */ }
       const why = check.reason === 'size'
         ? `file is larger than ${expected === 'video' ? '50 MB' : '5 MB'}`
         : `file format is not allowed (Cloudinary reported format '${check.format || 'none'}', type '${check.resourceType || 'unknown'}')`;
-      return fail(res, 400, 'validation_error', `Upload rejected: ${why} (asset removed).`);
+      return fail(res, 400, 'validation_error', `Upload rejected: ${why}${removed ? ' (asset removed).' : ' (asset could not be removed — contact an admin).'}`);
     }
     return ok(res, { verified: true, secure_url: asset.secure_url, format: asset.format, bytes: asset.bytes, resource_type: asset.resource_type });
   } catch { return fail(res, 503, 'upload_unavailable', 'Upload verification is temporarily unavailable.'); }
@@ -244,18 +257,18 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
 adminRouter.post('/media/meta', requireMemberOrAdmin(async (req, res) => {
   const p = parseBody(mediaMetaSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
   const { public_id, title, description } = p.data;
-  if (!public_id.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can have details.');
-  if (req.actor.role !== 'admin' && !public_id.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can add details only to your own uploads.');
+  if (!isPortfolioAsset(public_id)) return fail(res, 400, 'validation_error', 'Only portfolio uploads can have details.');
+  if (!isOwnAsset(req.actor, public_id)) return fail(res, 403, 'forbidden', 'You can add details only to your own uploads.');
   try {
     const row = await store.saveMediaMeta(public_id, { title: (title || '').trim(), description: (description || '').trim(), updated_by: req.actor.uid });
-    await audit(store, { user_id: req.actor.uid, action: 'media.meta_saved', entity: 'media', entity_id: public_id });
-    return ok(res, row);
+    const mediaAudit = await audit(store, { user_id: req.actor.uid, action: 'media.meta_saved', entity: 'media', entity_id: public_id });
+    return ok(res, { ...row, ...auditFailedFlag(mediaAudit) });
   } catch { return fail(res, 503, 'unavailable', 'Details could not be saved.'); }
 }));
 adminRouter.delete('/media', requireMemberOrAdmin(async (req, res) => {
   const publicId = typeof req.query.public_id === 'string' ? req.query.public_id : '';
-  if (!publicId.startsWith('aict-portfolio/')) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be deleted.');
-  if (req.actor.role !== 'admin' && !publicId.includes(`/${req.actor.uid}-`)) return fail(res, 403, 'forbidden', 'You can delete only your own uploads.');
+  if (!isPortfolioAsset(publicId)) return fail(res, 400, 'validation_error', 'Only portfolio uploads can be deleted.');
+  if (!isOwnAsset(req.actor, publicId)) return fail(res, 403, 'forbidden', 'You can delete only your own uploads.');
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return fail(res, 503, 'upload_unavailable', 'File uploads are not configured.');
   try {
@@ -265,8 +278,8 @@ adminRouter.delete('/media', requireMemberOrAdmin(async (req, res) => {
     const destroyed = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
     if (destroyed && destroyed.result && destroyed.result !== 'ok' && destroyed.result !== 'not found') return fail(res, 503, 'unavailable', 'The file could not be deleted from storage.');
     try { await store.deleteMediaMeta(publicId); } catch { /* meta cleanup best effort */ }
-    await audit(store, { user_id: req.actor.uid, action: 'media.delete', entity: 'media', entity_id: publicId });
-    return ok(res, { deleted: true });
+    const mediaAudit = await audit(store, { user_id: req.actor.uid, action: 'media.delete', entity: 'media', entity_id: publicId });
+    return ok(res, { deleted: true, ...auditFailedFlag(mediaAudit) });
   } catch { return fail(res, 503, 'unavailable', 'The file could not be deleted.'); }
 }));
 adminRouter.post('/revalidate', requireAdmin(async (req, res) => ok(res, { status: 'live_on_next_load', note: 'Public pages fetch live data from this API in the browser, so saved content is live on the next page load with no rebuild. A Netlify rebuild is only needed for code changes, and Netlify auto-builds on a push to main.' })));
@@ -277,10 +290,10 @@ adminRouter.get('/achievements', requireMemberOrAdmin(async (req, res) => {
 // ---- Messages: mark read/unread + delete (admin only) ----
 adminRouter.patch('/messages/:id', requireAdmin(async (req, res) => {
   const p = parseBody(messagePatchSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  try { await store.markMessage(req.params.id, p.data.read); await audit(store, { user_id: req.actor.uid, action: 'message.update', entity: 'contact_messages', entity_id: req.params.id }); return ok(res, { id: req.params.id, read: p.data.read }); } catch { return fail(res, 503, 'unavailable', 'Message could not be updated.'); }
+  try { const all = await store.messagesAll(); if (!all.some((m) => m.id === req.params.id)) return fail(res, 404, 'not_found', 'Message not found.'); await store.markMessage(req.params.id, p.data.read); const msgAudit = await audit(store, { user_id: req.actor.uid, action: 'message.update', entity: 'contact_messages', entity_id: req.params.id }); return ok(res, { id: req.params.id, read: p.data.read, ...auditFailedFlag(msgAudit) }); } catch { return fail(res, 503, 'unavailable', 'Message could not be updated.'); }
 }));
 adminRouter.delete('/messages/:id', requireAdmin(async (req, res) => {
-  try { await store.deleteMessage(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'message.delete', entity: 'contact_messages', entity_id: req.params.id }); return ok(res, { deleted: true }); } catch { return fail(res, 503, 'unavailable', 'Message could not be deleted.'); }
+  try { const all = await store.messagesAll(); if (!all.some((m) => m.id === req.params.id)) return fail(res, 404, 'not_found', 'Message not found.'); await store.deleteMessage(req.params.id); const msgAudit = await audit(store, { user_id: req.actor.uid, action: 'message.delete', entity: 'contact_messages', entity_id: req.params.id }); return ok(res, { deleted: true, ...auditFailedFlag(msgAudit) }); } catch { return fail(res, 503, 'unavailable', 'Message could not be deleted.'); }
 }));
 // ---- Audit + revisions (admin only) ----
 adminRouter.get('/audit', requireAdmin(async (req, res) => {
@@ -301,8 +314,8 @@ adminRouter.post('/revisions/:id/restore', requireAdmin(async (req, res) => {
       const beforeSite = await store.site();
       if (beforeSite) await store.addRevision({ entity: 'site_settings', entity_id: 'main', snapshot: beforeSite, created_at: new Date().toISOString(), user_id: req.actor.uid });
       await store.replaceSite(siteParsed.data);
-      await audit(store, { user_id: req.actor.uid, action: 'revision.restore', entity: 'site_settings', entity_id: 'main' });
-      return ok(res, { restored: true, entity: 'site_settings', entity_id: 'main' });
+      const siteAudit = await audit(store, { user_id: req.actor.uid, action: 'revision.restore', entity: 'site_settings', entity_id: 'main' });
+      return ok(res, { restored: true, entity: 'site_settings', entity_id: 'main', ...auditFailedFlag(siteAudit) });
     }
     // Audit fix (data-integrity review): restoring a revision of a deleted
     // record must not silently recreate it, and a raw snapshot must pass
@@ -315,6 +328,13 @@ adminRouter.post('/revisions/:id/restore', requireAdmin(async (req, res) => {
     const schema = rev.entity === 'members' ? memberSchema.partial() : rev.entity === 'projects' ? projectSchema.partial() : achievementSchema.partial();
     const parsed = parseBody(schema, rawFields); if (!parsed.ok) return fail(res, 400, 'validation_error', 'This revision no longer passes validation and cannot be restored.');
     const fields = parsed.data;
+    // Restore must not duplicate a live slug or create a second leader:
+    // the snapshot predates the current state, so check both now.
+    const currentForSlug = rev.entity === 'members' ? await store.memberById(rev.entity_id)
+      : rev.entity === 'projects' ? (await store.projectsAll()).find((x) => x.id === rev.entity_id) : null;
+    if (fields.slug && currentForSlug && fields.slug !== currentForSlug.slug && await slugTaken(rev.entity === 'members' ? 'members' : 'projects', fields.slug, rev.entity_id)) return fail(res, 409, 'slug_taken', 'Another record already uses this web address (slug).');
+    const restoreSlugChanged = fields.slug && currentForSlug && fields.slug !== currentForSlug.slug;
+    if (restoreSlugChanged && !(await store.reserveSlug(rev.entity === 'members' ? 'members' : 'projects', fields.slug, rev.entity_id))) return fail(res, 409, 'slug_taken', 'Another record already uses this web address (slug).');
     // Section 5B true restore: replace the document (fields added after the
     // snapshot are removed), preserving only id + timestamps semantics.
     // The pre-restore state is snapshotted first so a restore can be undone.
@@ -326,8 +346,10 @@ adminRouter.post('/revisions/:id/restore', requireAdmin(async (req, res) => {
     else if (rev.entity === 'projects') await store.replaceProject(rev.entity_id, fields);
     else if (rev.entity === 'achievements') await store.replaceAchievement(rev.entity_id, fields);
     else return fail(res, 400, 'not_supported', 'Unknown revision entity.');
-    await audit(store, { user_id: req.actor.uid, action: 'revision.restore', entity: rev.entity, entity_id: rev.entity_id });
-    return ok(res, { restored: true, entity: rev.entity, entity_id: rev.entity_id });
+    if (restoreSlugChanged && currentForSlug.slug) await store.releaseSlug(rev.entity === 'members' ? 'members' : 'projects', currentForSlug.slug, rev.entity_id);
+    if (rev.entity === 'members' && fields.is_leader) await clearOtherLeaders(rev.entity_id);
+    const restoreAudit = await audit(store, { user_id: req.actor.uid, action: 'revision.restore', entity: rev.entity, entity_id: rev.entity_id });
+    return ok(res, { restored: true, entity: rev.entity, entity_id: rev.entity_id, ...auditFailedFlag(restoreAudit) });
   } catch { return fail(res, 503, 'unavailable', 'Revision could not be restored.'); }
 }));
 // ---- Media (Cloudinary list; fail-closed when unconfigured) ----
@@ -345,7 +367,7 @@ adminRouter.get('/media', requireMemberOrAdmin(async (req, res) => {
     // Audit fix 2026-10-29 (security review): members previously saw every
     // member's files. Non-admins see only uploads signed under their own UID
     // (public_id is aict-portfolio/<type>/<uid>-<timestamp>).
-    if (req.actor.role !== 'admin') items = items.filter((r) => r.public_id.includes(`/${req.actor.uid}-`));
+    if (req.actor.role !== 'admin') items = items.filter((r) => assetOwnerUid(r.public_id) === req.actor.uid);
     // Gallery details: overlay saved titles/descriptions when present.
     try { const meta = await store.mediaMetaAll(); const byId = new Map(meta.map((m) => [m.public_id, m])); items = items.map((r) => { const m = byId.get(r.public_id); return m ? { ...r, title: m.title || '', description: m.description || '' } : r; }); } catch { /* meta overlay is best effort */ }
     return ok(res, items);
@@ -355,14 +377,15 @@ adminRouter.get('/media', requireMemberOrAdmin(async (req, res) => {
 // ---- Invite links (admin only): create, list (no token hashes), revoke ----
 adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
   const p = parseBody(inviteLinkSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  if (p.data.member_id) { const profile = await store.memberById(p.data.member_id); if (!profile) return fail(res, 404, 'not_found', 'The linked team profile does not exist.'); }
+  if (!actorRateLimit(`invite-link:${req.actor.uid}`, 50, 60 * 60 * 1000)) return fail(res, 429, 'rate_limited', 'Too many invitation links. Please try again later.');
+  if (p.data.member_id) { const profile = await store.memberById(p.data.member_id); if (!profile) return fail(res, 404, 'not_found', 'The linked team profile does not exist.'); const roles = await store.rolesAll(); if (roles.some((r) => r.member_id === p.data.member_id)) return fail(res, 409, 'already_linked', 'That team profile is already linked to another account.'); }
   const existing = await store.roleByEmail(p.data.email);
   if (existing) return fail(res, 409, 'already_exists', 'An account already exists for this email. Use Set password on that account instead of a new invitation link.');
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const row = await store.saveInvite({ email: p.data.email, name: p.data.name, role: p.data.role, member_id: p.data.member_id || '', token_hash: tokenHash, used: false, revoked: false, invited_by: req.actor.uid, invited_at: new Date().toISOString(), expires_at: expiresAt });
-  await audit(store, { user_id: req.actor.uid, action: 'user.invite_link_created', entity: 'invites', entity_id: row.id });
+  const inviteAudit = await audit(store, { user_id: req.actor.uid, action: 'user.invite_link_created', entity: 'invites', entity_id: row.id });
   // The plaintext token is returned ONLY here, at creation. It is never
   // stored and never returned again (list/revoke responses omit it).
   const base = process.env.PUBLIC_SITE_URL || 'https://aictportfollio.netlify.app';
@@ -376,7 +399,7 @@ adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
     try {
       const nodemailer = (await import('nodemailer')).default;
       const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
-      await transporter.sendMail({ from: `"AICT Group Portfolio" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your AICT portfolio invitation', text: `Hi${p.data.name ? ` ${p.data.name}` : ''},\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
+      await transporter.sendMail({ from: `"AICT Group Portfolio" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your AICT portfolio invitation', text: `Hi${p.data.name ? ` ${oneLine(p.data.name)}` : ''},\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
       emailDelivery = 'gmail';
     } catch { emailDelivery = 'failed'; }
   } else if (isFirebase() && process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
@@ -386,7 +409,7 @@ adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
       emailDelivery = 'attempted';
     } catch { emailDelivery = 'link_only'; }
   }
-  return ok(res, { invite_id: row.id, email: row.email, role: row.role, expires_at: expiresAt, invite_link: inviteLink, email_delivery: emailDelivery }, 201);
+  return ok(res, { invite_id: row.id, email: row.email, role: row.role, expires_at: expiresAt, invite_link: inviteLink, email_delivery: emailDelivery, ...auditFailedFlag(inviteAudit) }, 201);
 }));
 adminRouter.get('/users/invite-links', requireAdmin(async (req, res) => {
   try {
@@ -396,7 +419,7 @@ adminRouter.get('/users/invite-links', requireAdmin(async (req, res) => {
   } catch { return fail(res, 503, 'unavailable', 'Invitations are temporarily unavailable.'); }
 }));
 adminRouter.post('/users/invite-links/:id/revoke', requireAdmin(async (req, res) => {
-  try { const all = await store.invitesAll(); if (!all.some((i) => i.id === req.params.id)) return fail(res, 404, 'not_found', 'Invitation not found.'); await store.markInviteRevoked(req.params.id); await audit(store, { user_id: req.actor.uid, action: 'user.invite_link_revoked', entity: 'invites', entity_id: req.params.id }); return ok(res, { revoked: true }); }
+  try { const all = await store.invitesAll(); if (!all.some((i) => i.id === req.params.id)) return fail(res, 404, 'not_found', 'Invitation not found.'); await store.markInviteRevoked(req.params.id); const revokeAudit = await audit(store, { user_id: req.actor.uid, action: 'user.invite_link_revoked', entity: 'invites', entity_id: req.params.id }); return ok(res, { revoked: true, ...auditFailedFlag(revokeAudit) }); }
   catch { return fail(res, 503, 'unavailable', 'Invitation could not be revoked.'); }
 }));
 adminRouter.get('/users', requireAdmin(async (req, res) => { try { return ok(res, await store.rolesAll()); } catch { return fail(res, 503, 'unavailable', 'Accounts are temporarily unavailable.'); } }));
@@ -410,6 +433,7 @@ adminRouter.post('/users/:id/set-password', requireAdmin(async (req, res) => {
   if (!isFirebase()) return fail(res, 503, 'unavailable', 'Password setting is only available with Firebase enabled.');
   try {
     const row = await store.roleByUid(req.params.id); if (!row) return fail(res, 404, 'not_found', 'Account not found.');
+    if (row.account_status === 'deactivated') return fail(res, 400, 'validation_error', 'This account is deactivated. Reactivate it before setting a password.');
     await authAdmin().updateUser(req.params.id, { password: p.data.password });
     const pwAudit = await audit(store, { user_id: req.actor.uid, action: 'user.password_set', entity: 'user_roles', entity_id: req.params.id });
     return ok(res, { password_set: true, ...(pwAudit.ok ? {} : { audit_failed: true }) });
@@ -430,12 +454,28 @@ adminRouter.patch('/users/:id', requireAdmin(async (req, res) => {
   const existingUser = await store.roleByUid(req.params.id);
   if (!existingUser) return fail(res, 404, 'not_found', 'Account not found.');
   const p = parseBody(userPatchSchema, req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
-  // If a profile link is requested, it must point at a real team profile.
+  // If a profile link is requested, it must point at a real team profile
+  // and must not already be linked to another account (one account per
+  // profile, otherwise two accounts could both edit the same profile).
   // Empty string is allowed and means "unlink this account from any profile".
   if (p.data.member_id) {
-    try { const prof = await store.memberById(p.data.member_id); if (!prof) return fail(res, 404, 'not_found', 'Team profile not found.'); } catch { return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
+    try { const prof = await store.memberById(p.data.member_id); if (!prof) return fail(res, 404, 'not_found', 'Team profile not found.'); const roles = await store.rolesAll(); if (roles.some((r) => r.member_id === p.data.member_id && r.id !== req.params.id && r.uid !== req.params.id)) return fail(res, 409, 'already_linked', 'That team profile is already linked to another account.'); } catch (e) { if (e && e.code) throw e; return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
   }
-  try { const row = await store.saveRole(req.params.id, p.data); const upAudit = await audit(store, { user_id: req.actor.uid, action: 'user.update', entity: 'user_roles', entity_id: req.params.id }); return ok(res, upAudit.ok ? row : { ...row, audit_failed: true }); } catch { return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
+  try {
+    // Keep the Firebase Auth account in step with the Firestore status:
+    // deactivation disables the Auth user AND revokes its refresh
+    // tokens (a deactivated account must not keep a usable session
+    // anywhere), reactivation re-enables it. Best effort: a Firebase
+    // failure must not block the Firestore status change, which is
+    // what every API request actually checks.
+    if (isFirebase() && p.data.account_status) {
+      try {
+        if (p.data.account_status === 'deactivated') { await authAdmin().updateUser(req.params.id, { disabled: true }); try { await authAdmin().revokeRefreshTokens(req.params.id); } catch { /* revocation best effort */ } }
+        else if (p.data.account_status === 'active' || p.data.account_status === 'invited') { await authAdmin().updateUser(req.params.id, { disabled: false }); }
+      } catch { /* Auth sync best effort */ }
+    }
+    const row = await store.saveRole(req.params.id, p.data); const upAudit = await audit(store, { user_id: req.actor.uid, action: 'user.update', entity: 'user_roles', entity_id: req.params.id }); return ok(res, upAudit.ok ? row : { ...row, audit_failed: true });
+  } catch { return fail(res, 503, 'unavailable', 'Account could not be updated.'); }
 }));
 adminRouter.delete('/users/:id', requireAdmin(async (req, res) => {
   // Account deletion: removes the sign-in account permanently. A linked
@@ -456,8 +496,8 @@ adminRouter.delete('/users/:id', requireAdmin(async (req, res) => {
     const links = await store.invitesAll();
     for (const l of links) { if (l.email === row.email && !l.used && !l.revoked) { try { await store.markInviteRevoked(l.id); } catch { /* revoked on retry */ } } }
     await store.deleteRole(req.params.id);
-    await audit(store, { user_id: req.actor.uid, action: 'user.deleted', entity: 'user_roles', entity_id: req.params.id });
-    return ok(res, { deleted: true });
+    const delAudit = await audit(store, { user_id: req.actor.uid, action: 'user.deleted', entity: 'user_roles', entity_id: req.params.id });
+    return ok(res, { deleted: true, ...auditFailedFlag(delAudit) });
   } catch { return fail(res, 503, 'unavailable', 'Account could not be deleted.'); }
 }));
 adminRouter.post('/users/:id/resend-invite', requireAdmin(async (req, res) => {
@@ -477,10 +517,15 @@ adminRouter.post('/users/:id/resend-invite', requireAdmin(async (req, res) => {
           await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: row.email, subject: 'Your AICT portfolio account', text: `Set your password here: ${link}` });
           sent = true;
         }
-      } catch { /* recorded, not exposed */ }
+      } catch (e) {
+        // A missing Auth user is a real state problem, not "not
+        // configured": the role row exists but no sign-in does. Say so
+        // plainly instead of reporting not_configured when Resend is set.
+        if (e && e.code === 'auth/user-not-found') return fail(res, 404, 'not_found', 'This account has no sign-in yet. Create a new invitation link for it instead.');
+      }
     }
-    await audit(store, { user_id: req.actor.uid, action: 'user.invite_resend', entity: 'user_roles', entity_id: req.params.id });
-    return ok(res, { ...row, resent: sent, email_delivery: sent ? 'sent' : 'not_configured' });
+    const resendAudit = await audit(store, { user_id: req.actor.uid, action: 'user.invite_resend', entity: 'user_roles', entity_id: req.params.id });
+    return ok(res, { ...row, resent: sent, email_delivery: sent ? 'sent' : 'not_configured', ...auditFailedFlag(resendAudit) });
   } catch { return fail(res, 503, 'unavailable', 'Invitation could not be resent.'); }
 }));
 adminRouter.post('/users/:id/revoke-invite', requireAdmin(async (req, res) => {
@@ -489,7 +534,7 @@ adminRouter.post('/users/:id/revoke-invite', requireAdmin(async (req, res) => {
   if (req.params.id === req.actor.uid) return fail(res, 403, 'forbidden', 'You cannot revoke your own account.');
   try {
     const row = await store.roleByUid(req.params.id); if (!row) return fail(res, 404, 'not_found', 'Account not found.');
-    if (isFirebase()) { try { await authAdmin().updateUser(req.params.id, { disabled: true }); } catch { /* best effort */ } }
+    if (isFirebase()) { try { await authAdmin().updateUser(req.params.id, { disabled: true }); try { await authAdmin().revokeRefreshTokens(req.params.id); } catch { /* revocation best effort */ } } catch { /* best effort */ } }
     const updated = await store.saveRole(req.params.id, { account_status: 'deactivated' });
     const revAudit = await audit(store, { user_id: req.actor.uid, action: 'user.invite_revoke', entity: 'user_roles', entity_id: req.params.id });
     return ok(res, { ...updated, revoked: true, ...(revAudit.ok ? {} : { audit_failed: true }) });

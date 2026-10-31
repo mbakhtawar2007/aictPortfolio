@@ -13,3 +13,10 @@ export async function audit(store, entry) {
   }
   return { row, ok: false };
 }
+// Spread this into a success response when an audit write failed, so
+// the caller can see the action succeeded but its audit record did
+// not land. Every mutating route should use it, not just the three
+// account routes that did before this audit.
+export function auditFailedFlag(result) {
+  return result && result.ok ? {} : { audit_failed: true };
+}

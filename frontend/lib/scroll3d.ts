@@ -12,12 +12,20 @@ gsap.registerPlugin(ScrollTrigger);
 export const scrollProgress = { value: 0 };
 
 let lenis: Lenis | null = null;
+let stopSmooth: (() => void) | null = null;
+
+/** Reduced motion means the OS setting OR the site's own Reduce-effects toggle. */
+export function reducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+    document.documentElement.getAttribute('data-reduce') === 'true';
+}
 
 /** Start Lenis smooth scrolling + the ScrollTrigger progress tween. No-op with reduced motion. */
 export function initSmoothScroll(): () => void {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (reducedMotion()) {
     return () => undefined;
   }
+  if (stopSmooth) return stopSmooth;
   lenis = new Lenis({ lerp: 0.09, smoothWheel: true });
   lenis.on('scroll', ScrollTrigger.update);
   const tick = (time: number) => lenis?.raf(time * 1000);
@@ -35,20 +43,37 @@ export function initSmoothScroll(): () => void {
   });
   const refresh = () => ScrollTrigger.refresh();
   window.addEventListener('load', refresh);
-  return () => {
+  const stop = () => {
     window.removeEventListener('load', refresh);
     gsap.ticker.remove(tick);
     tween.scrollTrigger?.kill();
     tween.kill();
     lenis?.destroy();
     lenis = null;
+    stopSmooth = null;
   };
+  stopSmooth = stop;
+  return stop;
+}
+
+/** Re-apply the reduced-motion preference live: stop Lenis when reduced, start it when not. */
+export function applySmoothScrollPreference(): void {
+  if (reducedMotion()) {
+    stopSmooth?.();
+    stopSmooth = null;
+  } else {
+    initSmoothScroll();
+  }
 }
 
 /** Smooth-scroll to an in-page anchor (via Lenis when active, native otherwise). */
 export function scrollToSection(hash: string) {
   const el = document.querySelector(hash);
   if (!el) return;
+  if (reducedMotion()) {
+    (el as HTMLElement).scrollIntoView({ behavior: 'auto' });
+    return;
+  }
   if (lenis) {
     lenis.scrollTo(el as HTMLElement, { offset: -72 });
   } else {

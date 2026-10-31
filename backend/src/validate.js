@@ -121,7 +121,7 @@ export const userPatchSchema = z.object({
 }).strict().refine((v) => v.role || v.account_status || v.member_id !== undefined, { message: 'Nothing to update' });
 export const uploadSignSchema = z.object({
   file_type: z.enum(['image', 'pdf', 'video']),
-  file_size: z.number().int().positive().max(50 * 1024 * 1024),
+  file_size: z.number().int().positive().max(100 * 1024 * 1024), // ceiling for video; per-type caps (5 MB image/pdf, 100 MB video) are enforced in the sign handler
   file_name: z.string().min(1).max(200),
 }).strict();
 export const mediaMetaSchema = z.object({

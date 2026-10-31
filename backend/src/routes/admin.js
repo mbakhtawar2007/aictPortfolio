@@ -186,8 +186,8 @@ adminRouter.post('/upload/sign', requireMemberOrAdmin(async (req, res) => {
   if (p.data.file_type === 'pdf' && ext !== 'pdf') return fail(res, 400, 'validation_error', 'Resumes must be PDF files.');
   if (p.data.file_type === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext)) return fail(res, 400, 'validation_error', 'Images must be jpg, png, webp or avif.');
   if (p.data.file_type === 'video' && !['mp4', 'webm'].includes(ext)) return fail(res, 400, 'validation_error', 'Videos must be MP4 or WebM.');
-  const maxSignBytes = p.data.file_type === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
-  if (p.data.file_size > maxSignBytes) return fail(res, 400, 'validation_error', `File is larger than ${p.data.file_type === 'video' ? '50 MB' : '5 MB'}.`);
+  const maxSignBytes = p.data.file_type === 'video' ? 100 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (p.data.file_size > maxSignBytes) return fail(res, 400, 'validation_error', `File is larger than ${p.data.file_type === 'video' ? '100 MB' : '5 MB'}.`);
   try {
     const cloudinary = (await import('cloudinary')).v2;
     cloudinary.config({ cloud_name: CLOUDINARY_CLOUD_NAME, api_key: CLOUDINARY_API_KEY, api_secret: CLOUDINARY_API_SECRET, secure: true });
@@ -247,7 +247,7 @@ adminRouter.post('/upload/verify', requireMemberOrAdmin(async (req, res) => {
       let removed = false;
       try { const d = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType }); removed = d && (d.result === 'ok' || d.result === 'not found'); } catch { /* removal best effort */ }
       const why = check.reason === 'size'
-        ? `file is larger than ${expected === 'video' ? '50 MB' : '5 MB'}`
+        ? `file is larger than ${expected === 'video' ? '100 MB' : '5 MB'}`
         : `file format is not allowed (Cloudinary reported format '${check.format || 'none'}', type '${check.resourceType || 'unknown'}')`;
       return fail(res, 400, 'validation_error', `Upload rejected: ${why}${removed ? ' (asset removed).' : ' (asset could not be removed — contact an admin).'}`);
     }
@@ -399,13 +399,13 @@ adminRouter.post('/users/invite-link', requireAdmin(async (req, res) => {
     try {
       const nodemailer = (await import('nodemailer')).default;
       const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
-      await transporter.sendMail({ from: `"AICT Group Portfolio" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your AICT portfolio invitation', text: `Hi${p.data.name ? ` ${oneLine(p.data.name)}` : ''},\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
+      await transporter.sendMail({ from: `"TechHive" <${process.env.GMAIL_USER}>`, to: p.data.email, subject: 'Your TechHive invitation', text: `Hi${p.data.name ? ` ${oneLine(p.data.name)}` : ''},\n\nYou have been invited to TechHive. Create your account here (link expires in 7 days):\n${inviteLink}\n` });
       emailDelivery = 'gmail';
     } catch { emailDelivery = 'failed'; }
   } else if (isFirebase() && process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
     try {
       const { Resend } = await import('resend');
-      await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: p.data.email, subject: 'Your AICT portfolio invitation', text: `You have been invited to the AICT group portfolio. Create your account here (link expires in 7 days): ${inviteLink}` });
+      await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'TechHive <onboarding@resend.dev>', to: p.data.email, subject: 'Your TechHive invitation', text: `You have been invited to TechHive. Create your account here (link expires in 7 days): ${inviteLink}` });
       emailDelivery = 'attempted';
     } catch { emailDelivery = 'link_only'; }
   }
@@ -514,7 +514,7 @@ adminRouter.post('/users/:id/resend-invite', requireAdmin(async (req, res) => {
         const link = await authAdmin().generatePasswordResetLink(row.email);
         if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
           const { Resend } = await import('resend');
-          await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'AICT Portfolio <onboarding@resend.dev>', to: row.email, subject: 'Your AICT portfolio account', text: `Set your password here: ${link}` });
+          await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'TechHive <onboarding@resend.dev>', to: row.email, subject: 'Your TechHive account', text: `Set your password here: ${link}` });
           sent = true;
         }
       } catch (e) {

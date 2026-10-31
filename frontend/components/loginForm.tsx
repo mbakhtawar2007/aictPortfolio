@@ -55,7 +55,7 @@ export default function LoginForm({ heading }: { heading: string }) {
   const switchLabel = isAdminLogin ? 'Member login' : 'Admin login';
   return (<div className="login-shell">
     <div className="login-card">
-      <p className="login-eyebrow">AICT Group</p>
+      <p className="login-eyebrow">TechHive</p>
       <h1 className="login-title">{heading}</h1>
       <p className="login-subtitle">Welcome back. Sign in to your team workspace.</p>
       {!firebaseConfigured() && <p className="error" role="alert">Firebase is not configured for this build (NEXT_PUBLIC_FIREBASE_* missing). Sign-in will fail until the site owner sets those public config values at Netlify build time. This is not a broken password — it is a missing configuration.</p>}

@@ -15,7 +15,7 @@
 // and prefix/ownership checks run before this). A present format that
 // is not PDF (e.g. 'docx') is still rejected, even with a `.pdf` id.
 export function checkVerifyAsset(expected, asset, publicId) {
-  const maxBytes = expected === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+  const maxBytes = expected === 'video' ? 100 * 1024 * 1024 : 5 * 1024 * 1024;
   const format = (asset.format || '').toLowerCase().trim();
   const resourceType = asset.resource_type || '';
   if (typeof asset.bytes !== 'number' || asset.bytes > maxBytes) {

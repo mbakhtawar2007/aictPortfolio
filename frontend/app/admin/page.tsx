@@ -31,12 +31,13 @@ export default function AdminDashboard() {
   const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
   const [gateError, setGateError] = useState('');
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  // Limited admin (2026-10-29, user request): for now only Start here,
-  // Team members (profiles), Team accounts (member account creation) and
-  // Uploads (photo / resume / video upload) are shown. The other tabs'
-  // panels and forms below are untouched — re-add their ids to
-  // VISIBLE_TAB_IDS to bring a tab back.
-  const VISIBLE_TAB_IDS: Tab[] = ['overview', 'members', 'users', 'media'];
+  // Limited admin (2026-10-29, user request): Start here, Team members,
+  // Team accounts, Uploads — plus Projects again from 2026-10-31 (user
+  // request, so admins can link YouTube videos via the project form).
+  // Achievements, Messages and Site settings stay hidden; their panels
+  // and forms below are untouched — re-add their ids to VISIBLE_TAB_IDS
+  // to bring a tab back.
+  const VISIBLE_TAB_IDS: Tab[] = ['overview', 'members', 'users', 'media', 'projects'];
   const NAV_GROUPS_VISIBLE = NAV_GROUPS.map((g) => ({ ...g, tabs: g.tabs.filter((x) => VISIBLE_TAB_IDS.includes(x.id)) })).filter((g) => g.tabs.length);
   const allTabs = NAV_GROUPS_VISIBLE.flatMap((g) => g.tabs);
   const onTabKey = (e: React.KeyboardEvent, id: Tab) => {
@@ -61,13 +62,19 @@ export default function AdminDashboard() {
   const [pendingLinks, setPendingLinks] = useState<Array<Record<string, unknown>>>([]); const [linksError, setLinksError] = useState('');
   const [passwordDraft, setPasswordDraft] = useState<Record<string, string>>({}); const [passwordConfirmDraft, setPasswordConfirmDraft] = useState<Record<string, string>>({}); const [confirmUserAction, setConfirmUserAction] = useState<{ id: string; kind: string; body?: unknown; label: string } | null>(null);
   const [linkDraft, setLinkDraft] = useState<Record<string, string>>({});
+  // Team accounts simplification (2026-10-31): cards show name/email/role only; the rest lives behind Manage.
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [revEntity, setRevEntity] = useState(''); const [revId, setRevId] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image'); const [uploadKey, setUploadKey] = useState(0); const [uploadTitle, setUploadTitle] = useState(''); const [uploadDescription, setUploadDescription] = useState(''); const [uploadStoryline, setUploadStoryline] = useState(''); const [uploadCharacters, setUploadCharacters] = useState(''); const [uploadTechnology, setUploadTechnology] = useState(''); const [uploadTeam, setUploadTeam] = useState<string[]>([]); const [uploadThumbFile, setUploadThumbFile] = useState<File | null>(null); const [uploadCategory, setUploadCategory] = useState('AI Video'); const [uploadVideoFormat, setUploadVideoFormat] = useState('full'); const [uploadVisibility, setUploadVisibility] = useState('public'); const [uploadTags, setUploadTags] = useState(''); const [uploadYear, setUploadYear] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0); const [uploadBusy, setUploadBusy] = useState(false); const [uploadUrl, setUploadUrl] = useState(''); const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const [memberQuery, setMemberQuery] = useState(''); const [projectQuery, setProjectQuery] = useState(''); const [achievementQuery, setAchievementQuery] = useState('');
 
   useEffect(() => { setToken(authToken()); }, []);
-  const reload = useCallback(async () => {
+  // Lazy sections (2026-10-31): the first load fetches only what the visible tabs need
+  // (members, accounts, uploads). Hidden-tab data (projects, achievements, messages,
+  // settings, history) is fetched on demand when its tab is opened, instead of on every load.
+  const [loadedSections, setLoadedSections] = useState<Record<string, boolean>>({});
+  const reload = useCallback(async (coreOnly?: boolean) => {
     setGateError(''); setSectionErrors({});
     // Members do not see this page at all — send them to their own page.
     // A network/backend failure on /admin/me is NOT a logout: show a
@@ -79,27 +86,44 @@ export default function AdminDashboard() {
       setGateError(me.error.message); setLoading(false); return;
     }
     setIsAdmin(me.data?.role === 'admin'); setMeUid((me.data as { uid?: string } | undefined)?.uid || '');
-    const [m, p, a, msg, u, s, au, rev, med] = await Promise.all([
-      apiGet<Member[]>('/admin/members', true), apiGet<Project[]>('/admin/projects', true), apiGet<Achievement[]>('/admin/achievements', true),
-      apiGet<ContactMessage[]>('/admin/messages', true), apiGet<UserRole[]>('/admin/users', true), apiGet<SiteSettings>('/admin/settings', true),
-      apiGet<AuditEntry[]>('/admin/audit?limit=50', true), apiGet<Revision[]>('/admin/revisions', true), apiGet<MediaItem[]>('/admin/media', true),
+    const [m, u, med] = await Promise.all([
+      apiGet<Member[]>('/admin/members', true), apiGet<UserRole[]>('/admin/users', true), apiGet<MediaItem[]>('/admin/media', true),
     ]);
     const errs: Record<string, string> = {};
     if (m.error) errs.members = m.error.message; else setMembers(m.data || []);
-    if (p.error) errs.projects = p.error.message; else setProjects(p.data || []);
-    if (a.error) errs.achievements = a.error.message; else setAchievements(a.data || []);
-    if (msg.error) errs.messages = msg.error.message; else setMessages(msg.data || []);
     if (u.error) errs.users = u.error.message; else setUsers(u.data || []);
     const links = await apiGet<Array<Record<string, unknown>>>('/admin/users/invite-links', true);
     if (links.data) { setPendingLinks(links.data); setLinksError(''); } else if (links.error) setLinksError(links.error.message);
-    if (s.error) errs.settings = s.error.message; else setSettings(s.data);
-    if (au.error) errs.audit = au.error.message; else setAudit(au.data || []);
-    if (rev.error) errs.revisions = rev.error.message; else setRevisions(rev.data || []);
     if (med.data) { setMedia(med.data); setMediaError(''); } else if (med.error) { errs.media = med.error.message; setMediaError(med.error.message); }
+    if (!coreOnly) {
+      const [pr, ac, msg, st, au, rev] = await Promise.all([
+        apiGet<Project[]>('/admin/projects', true), apiGet<Achievement[]>('/admin/achievements', true),
+        apiGet<ContactMessage[]>('/admin/messages', true), apiGet<SiteSettings>('/admin/settings', true),
+        apiGet<AuditEntry[]>('/admin/audit?limit=50', true), apiGet<Revision[]>('/admin/revisions', true),
+      ]);
+      if (pr.error) errs.projects = pr.error.message; else setProjects(pr.data || []);
+      if (ac.error) errs.achievements = ac.error.message; else setAchievements(ac.data || []);
+      if (msg.error) errs.messages = msg.error.message; else setMessages(msg.data || []);
+      if (st.error) errs.settings = st.error.message; else setSettings(st.data);
+      if (au.error) errs.audit = au.error.message; else setAudit(au.data || []);
+      if (rev.error) errs.revisions = rev.error.message; else setRevisions(rev.data || []);
+      setLoadedSections({ projects: true, achievements: true, messages: true, settings: true, audit: true });
+    }
     setSectionErrors(errs);
     setLoading(false);
   }, []);
-  useEffect(() => { if (token) reload(); else setLoading(false); }, [token, reload]);
+  // Fetch one hidden section on demand when its tab is opened (only matters once a hidden tab is re-enabled).
+  const loadSection = useCallback(async (key: Tab) => {
+    if (loadedSections[key]) return;
+    setLoadedSections((x) => ({ ...x, [key]: true }));
+    if (key === 'projects') { const r = await apiGet<Project[]>('/admin/projects', true); if (r.error) setSectionErrors((e) => ({ ...e, projects: r.error!.message })); else setProjects(r.data || []); }
+    else if (key === 'achievements') { const r = await apiGet<Achievement[]>('/admin/achievements', true); if (r.error) setSectionErrors((e) => ({ ...e, achievements: r.error!.message })); else setAchievements(r.data || []); }
+    else if (key === 'messages') { const r = await apiGet<ContactMessage[]>('/admin/messages', true); if (r.error) setSectionErrors((e) => ({ ...e, messages: r.error!.message })); else setMessages(r.data || []); }
+    else if (key === 'settings') { const r = await apiGet<SiteSettings>('/admin/settings', true); if (r.error) setSectionErrors((e) => ({ ...e, settings: r.error!.message })); else setSettings(r.data); }
+    else if (key === 'audit') { const r = await apiGet<AuditEntry[]>('/admin/audit?limit=50', true); if (r.error) setSectionErrors((e) => ({ ...e, audit: r.error!.message })); else setAudit(r.data || []); }
+  }, [loadedSections]);
+  useEffect(() => { if (['projects', 'achievements', 'messages', 'settings', 'audit'].includes(tab)) void loadSection(tab); }, [tab, loadSection]);
+  useEffect(() => { if (token) reload(true); else setLoading(false); }, [token, reload]);
 
   async function doDelete() {
     if (!deleting) return; setDeleteBusy(true);
@@ -172,7 +196,7 @@ export default function AdminDashboard() {
     if (uploadType === 'pdf' && ext !== 'pdf') { push('error', 'Resumes must be PDF files.'); return; }
     if (uploadType === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext)) { push('error', 'Images must be jpg, png, webp or avif.'); return; }
     if (uploadType === 'video' && !['mp4', 'webm'].includes(ext)) { push('error', 'Videos must be MP4 or WebM.'); return; }
-    if (uploadFile.size > (uploadType === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 50 MB or smaller.' : 'File must be 5 MB or smaller.'); return; }
+    if (uploadFile.size > (uploadType === 'video' ? 100 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 100 MB or smaller (Cloudinary free-plan limit).' : 'File must be 5 MB or smaller.'); return; }
     if (uploadType === 'video' && uploadYear.trim() !== '') { const y = Number(uploadYear); if (!Number.isInteger(y) || y < 2000 || y > 2100) { push('error', 'Year must be between 2000 and 2100.'); return; } }
     setUploadBusy(true); setUploadProgress(0); setUploadUrl('');
     const sign = await apiSend('/admin/upload/sign', 'POST', { file_type: uploadType, file_size: uploadFile.size, file_name: uploadFile.name }, true);
@@ -181,7 +205,7 @@ export default function AdminDashboard() {
     const form = new FormData();
     form.append('file', uploadFile); form.append('api_key', String(d.api_key)); form.append('timestamp', String(d.timestamp)); form.append('public_id', String(d.public_id)); form.append('signature', String(d.signature));
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
-    const xhr = new XMLHttpRequest(); uploadXhrRef.current = xhr; xhr.timeout = 120000;
+    const xhr = new XMLHttpRequest(); uploadXhrRef.current = xhr; xhr.timeout = uploadType === 'video' ? 0 : 120000;
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };
     xhr.ontimeout = () => { uploadXhrRef.current = null; setUploadBusy(false); push('error', 'Upload timed out after 2 minutes. Check your connection and try again, or use a smaller file.'); };
     xhr.onabort = () => { uploadXhrRef.current = null; setUploadBusy(false); };
@@ -192,7 +216,7 @@ export default function AdminDashboard() {
 
   if (loading) return <Loading />;
   if (!token) return (<div><h1>Admin dashboard</h1><p className="error">Sign-in required. <a href="/login">Go to login</a></p><p className="muted">There is no sign-up on this site. An admin must invite you first.</p></div>);
-  if (gateError) return (<div><h1>Admin dashboard</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={reload}>Try again</button>{' '}<button className="btn secondary" onClick={() => { void signOutSession(); }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out — retry once the backend recovers.</p></div>);
+  if (gateError) return (<div><h1>Admin dashboard</h1><ErrorBox message={gateError} /><p><button className="btn" onClick={() => reload()}>Try again</button>{' '}<button className="btn secondary" onClick={() => { void signOutSession(); }}>Sign out</button></p><p className="muted">The backend could not be reached or your account could not be checked. This does not mean you were signed out — retry once the backend recovers.</p></div>);
   const unread = messages.filter((m) => !m.read).length;
   const filteredMembers = members.filter((m) => (m.full_name + ' ' + (m.role_title || '')).toLowerCase().includes(memberQuery.toLowerCase()));
   const filteredProjects = projects.filter((p) => (p.title + ' ' + (p.category || '')).toLowerCase().includes(projectQuery.toLowerCase()));
@@ -205,7 +229,7 @@ export default function AdminDashboard() {
     <p className="muted">Signed in as <span className="chip admin-role-chip">{isAdmin ? 'Admin' : 'Team member'}</span>. Admins can edit everything. Team members can only edit their own profile and projects they are assigned to.</p>
     <nav className="admin-nav" aria-label="Admin sections">{NAV_GROUPS_VISIBLE.map((g) => (<div className="admin-nav-group" key={g.label}><span className="admin-nav-label">{g.label}</span><div className="tabs admin-tabs" role="tablist" aria-label={`${g.label} sections`}>{g.tabs.map((t) => (<button key={t.id} ref={(el) => { tabRefs.current[t.id] = el; }} id={`admin-tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls="admin-panel" tabIndex={tab === t.id ? 0 : -1} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)} onKeyDown={(e) => onTabKey(e, t.id)}>{t.label}{t.id === 'messages' && unread > 0 ? ` (${unread})` : ''}</button>))}</div></div>))}
       <button className="btn secondary small" onClick={() => { void signOutSession(); }}>Sign out</button></nav>
-    {visibleErrors.length > 0 && (<div><ErrorBox message={`Some sections could not be loaded: ${visibleErrors.map(([k, v]) => `${plainSection(k)} — ${v}`).join('; ')}`} /><p><button className="btn secondary" onClick={reload}>Try loading again</button></p><p className="muted">Sections that failed are not empty — their data simply did not arrive. Other sections still show their data.</p></div>)}
+    {visibleErrors.length > 0 && (<div><ErrorBox message={`Some sections could not be loaded: ${visibleErrors.map(([k, v]) => `${plainSection(k)} — ${v}`).join('; ')}`} /><p><button className="btn secondary" onClick={() => reload()}>Try loading again</button></p><p className="muted">Sections that failed are not empty — their data simply did not arrive. Other sections still show their data.</p></div>)}
     <div role="tabpanel" id="admin-panel" aria-labelledby={`admin-tab-${tab}`}>
 
     {tab === 'overview' && (<div>
@@ -249,41 +273,46 @@ export default function AdminDashboard() {
       {editingAchievement !== undefined && (<Modal title={editingAchievement?.id ? 'Edit achievement' : 'New achievement'} onClose={() => setEditingAchievement(undefined)}><AchievementForm initial={editingAchievement} members={members} isAdmin={isAdmin} onSaved={() => { setEditingAchievement(undefined); reload(); }} onCancel={() => setEditingAchievement(undefined)} push={push} /></Modal>)}</div>)}
 
     {tab === 'users' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>
-      <p className="muted">Two things, kept separate: <strong>a sign-in account</strong> lets a person log in, and <strong>a team profile</strong> is what visitors see. Link them here so a member can edit their own profile. You cannot change your own role, status or password from this page — those controls are hidden on your own card, and the server refuses them anyway — but you can change other accounts' roles here, and link your own profile.</p>
+      <p className="muted">Two things, kept separate: <strong>a sign-in account</strong> lets a person log in, and <strong>a team profile</strong> is what visitors see. Link them here so a member can edit their own profile. Your own role, status and password cannot be changed here.</p>
       <form onSubmit={sendLinkInvite}><h2>Invite a team member</h2><p className="muted">The person gets a link, opens it, and creates their own account with a password they choose. Their email and role are fixed by you and cannot be changed on that page. The link expires after 7 days and works only once.</p>
-        <label>Name<input required value={linkInvite.name} onChange={(e) => setLinkInvite({ ...linkInvite, name: e.target.value })} /></label>
-        <label>Email<input required type="email" value={linkInvite.email} onChange={(e) => setLinkInvite({ ...linkInvite, email: e.target.value })} /></label>
+        <label>Name<input required autoComplete="off" value={linkInvite.name} onChange={(e) => setLinkInvite({ ...linkInvite, name: e.target.value })} /></label>
+        <label>Email<input required type="email" autoComplete="off" value={linkInvite.email} onChange={(e) => setLinkInvite({ ...linkInvite, email: e.target.value })} /></label>
         <label>Role<select value={linkInvite.role} onChange={(e) => setLinkInvite({ ...linkInvite, role: e.target.value })}><option value="member">Team member</option><option value="admin">Admin</option></select></label>
         {linkInvite.role === 'admin' && <label><input type="checkbox" checked={linkInvite.confirmAdmin} onChange={(e) => setLinkInvite({ ...linkInvite, confirmAdmin: e.target.checked })} /> I deliberately confirm granting admin — this is not the default.</label>}
         <label>Link to a team profile (optional)<select value={linkInvite.member_id} onChange={(e) => setLinkInvite({ ...linkInvite, member_id: e.target.value })}><option value="">No profile yet — they can create their own later</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
         <p><button className="btn" disabled={linkBusy}>{linkBusy ? 'Creating…' : 'Create invitation link'}</button></p>
         {linkNote && <p className="success">{linkNote}</p>}
-        {linkUrl && (<div><label>Invitation link<input readOnly value={linkUrl} onFocus={(e) => e.target.select()} /></label><p><button type="button" className="btn secondary small" onClick={() => { navigator.clipboard?.writeText(linkUrl); push('success', 'Link copied.'); }}>Copy link</button>{' '}<a className="btn secondary small" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(linkEmail)}&su=${encodeURIComponent('Your AICT portfolio invitation')}&body=${encodeURIComponent(`Hi,\n\nYou have been invited to the AICT group portfolio. Create your account here (link expires in 7 days):\n${linkUrl}\n`)}`}>Send via Gmail</a></p><p className="muted">Save this link now — it is shown only once and cannot be shown again. If it is lost, revoke it below and create a new one.</p></div>)}
+        {linkUrl && (<div><label>Invitation link<input readOnly value={linkUrl} onFocus={(e) => e.target.select()} /></label><p><button type="button" className="btn secondary small" onClick={() => { navigator.clipboard?.writeText(linkUrl); push('success', 'Link copied.'); }}>Copy link</button>{' '}<a className="btn secondary small" target="_blank" rel="noreferrer" href={`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(linkEmail)}&su=${encodeURIComponent('Your TechHive invitation')}&body=${encodeURIComponent(`Hi,\n\nYou have been invited to TechHive. Create your account here (link expires in 7 days):\n${linkUrl}\n`)}`}>Send via Gmail</a></p><p className="muted">Save this link now — it is shown only once and cannot be shown again. If it is lost, cancel it below and create a new one.</p></div>)}
       </form>
-      <h2>Pending invitation links</h2>
-      <div className="grid">{pendingLinks.filter((l) => !l.used && !l.revoked).map((l) => (<div className="card" key={String(l.id)}><h3>{String(l.name || l.email)}</h3><p className="muted">{String(l.email)} · {String(l.role) === 'admin' ? 'Admin' : 'Team member'} · expires {new Date(String(l.expires_at)).toLocaleDateString()}</p><p><button className="btn secondary small" disabled={!!pending[`link-${String(l.id)}`]} onClick={() => revokeLink(String(l.id))}>{pending[`link-${String(l.id)}`] ? 'Working…' : 'Revoke link'}</button></p></div>))}</div>
-      {!pendingLinks.filter((l) => !l.used && !l.revoked).length && <p className="muted">{linksError ? 'Pending links could not be loaded — try again.' : 'No pending invitation links.'}</p>}
-      <h2>Accounts</h2><p className="muted">Resend setup email sends the password email again. Activate marks an invited account active, but the person still needs a password — set one below or send the setup email. Revoke cancels an invitation and deactivates the account; Deactivate blocks sign-in until you Reactivate. Delete removes the sign-in account permanently; a linked team profile stays on the site but becomes unlinked.</p>
-      <div className="grid">{users.map((u) => { const linked = members.find((m) => m.id === u.member_id); return (<div className="card" key={u.id}><div className="admin-member-head"><span className="avatar" aria-hidden="true">{(u.name || u.email || '?').trim().charAt(0).toUpperCase()}</span><h3>{u.name || u.email}</h3></div><p className="muted">{u.email} · {u.role === 'admin' ? 'Admin' : 'Team member'} · {u.account_status ? u.account_status.charAt(0).toUpperCase() + u.account_status.slice(1) : ''}</p><p className="muted">Profile: {linked ? linked.full_name : 'Not linked yet'}</p>
-        {u.id === meUid ? null : (<label>Role<select value={u.role} disabled={!!pending[`user-${u.id}-role`]} onChange={(e) => { const next = e.target.value; if (next === u.role) return; if (next === 'admin') setConfirmUserAction({ id: u.id, kind: 'role', body: { role: 'admin' }, label: 'Grant admin to this account? Admins can change accounts, content and settings.' }); else userAction(u.id, 'role', { role: next }, undefined, `Role changed to ${next === 'admin' ? 'Admin' : 'Team member'}.`); }}><option value="member">Team member</option><option value="admin">Admin</option></select></label>)}
-        <label>Link profile<select value={linkDraft[u.id] ?? u.member_id ?? ''} onChange={(e) => setLinkDraft({ ...linkDraft, [u.id]: e.target.value })}><option value="">No profile</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
-        <p><button className="btn secondary small" disabled={!!pending[`user-${u.id}-link`]} onClick={() => { const next = members.find((m) => m.id === (linkDraft[u.id] ?? u.member_id ?? '')); userAction(u.id, 'link', { member_id: linkDraft[u.id] ?? u.member_id ?? '' }, undefined, next ? `Profile linked to ${next.full_name}.` : 'Profile unlinked.'); }}>{pending[`user-${u.id}-link`] ? 'Working…' : 'Save link'}</button>{' '}
-        {u.id !== meUid && u.account_status === 'invited' && <><button className="btn secondary small" disabled={!!pending[`user-${u.id}-resend`]} onClick={() => userAction(u.id, 'resend', undefined, u.email)}>{pending[`user-${u.id}-resend`] ? 'Working…' : 'Resend setup email'}</button>{' '}<button className="btn secondary small" disabled={!!pending[`user-${u.id}-activate`]} onClick={() => userAction(u.id, 'activate', { account_status: 'active' })}>{pending[`user-${u.id}-activate`] ? 'Working…' : 'Activate'}</button>{' '}<button className="btn secondary small" disabled={!!pending[`user-${u.id}-revoke`]} onClick={() => setConfirmUserAction({ id: u.id, kind: 'revoke', label: 'Revoke this invitation? The person will not be able to use it, and their account will be deactivated.' })}>{pending[`user-${u.id}-revoke`] ? 'Working…' : 'Revoke'}</button>{' '}</>}
-        {u.id !== meUid && u.account_status === 'active' && <button className="btn secondary small" disabled={!!pending[`user-${u.id}-deactivate`]} onClick={() => setConfirmUserAction({ id: u.id, kind: 'deactivate', body: { account_status: 'deactivated' }, label: 'Deactivate this account? They will not be able to sign in until you reactivate them.' })}>{pending[`user-${u.id}-deactivate`] ? 'Working…' : 'Deactivate'}</button>}
-        {u.id !== meUid && u.account_status === 'deactivated' && <button className="btn secondary small" disabled={!!pending[`user-${u.id}-reactivate`]} onClick={() => userAction(u.id, 'reactivate', { account_status: 'active' })}>{pending[`user-${u.id}-reactivate`] ? 'Working…' : 'Reactivate'}</button>}</p>
-        {u.id === meUid ? null : (<><label>Set / reset password<input type="password" value={passwordDraft[u.id] || ''} onChange={(e) => setPasswordDraft({ ...passwordDraft, [u.id]: e.target.value })} placeholder="At least 6 characters" /></label>
-        <label>Confirm password<input type="password" value={passwordConfirmDraft[u.id] || ''} onChange={(e) => setPasswordConfirmDraft({ ...passwordConfirmDraft, [u.id]: e.target.value })} placeholder="Repeat the password" /></label>
-        <p><button className="btn secondary small" disabled={!!pending[`pw-${u.id}`]} onClick={() => setAccountPassword(u.id)}>{pending[`pw-${u.id}`] ? 'Setting…' : 'Set password'}</button><span className="muted"> Share it privately — it is not shown again.</span></p></>)}{u.id === meUid ? <p className="muted">This is your account.</p> : <p><button className="btn secondary small" onClick={() => setDeleting({ kind: 'user', id: u.id, label: u.name || u.email || u.id, text: `Delete the sign-in account for "${u.name || u.email || u.id}" permanently? They will not be able to sign in again. Their team profile, if linked, stays on the site but becomes unlinked.` })}>Delete</button></p>}</div>); })}</div>
+      {(pendingLinks.filter((l) => !l.used && !l.revoked).length > 0 || linksError) && (<><h2>Pending invitation links</h2>
+      <div className="grid">{pendingLinks.filter((l) => !l.used && !l.revoked).map((l) => (<div className="card" key={String(l.id)}><h3>{String(l.name || l.email)}</h3><p className="muted">{String(l.email)} · {String(l.role) === 'admin' ? 'Admin' : 'Team member'} · expires {new Date(String(l.expires_at)).toLocaleDateString()}</p><p><button className="btn secondary small" disabled={!!pending[`link-${String(l.id)}`]} onClick={() => revokeLink(String(l.id))}>{pending[`link-${String(l.id)}`] ? 'Working…' : 'Cancel invitation'}</button></p></div>))}</div>
+      {!pendingLinks.filter((l) => !l.used && !l.revoked).length && linksError && <p className="muted">Pending links could not be loaded — try again.</p>}</>)}
+      <h2>Accounts</h2><p className="muted">Each card shows the name, email and role. Everything else — role changes, profile linking, password, deactivate and delete — lives behind Manage, so the list stays scannable.</p>
+      <div className="grid">{users.map((u) => { const linked = members.find((m) => m.id === u.member_id); const expanded = expandedUser === u.id; return (<div className="card" key={u.id}><div className="admin-member-head"><span className="avatar" aria-hidden="true">{(u.name || u.email || '?').trim().charAt(0).toUpperCase()}</span><h3>{u.name || u.email}</h3></div><p className="muted">{u.email} · {u.role === 'admin' ? 'Admin' : 'Team member'} · {u.account_status ? u.account_status.charAt(0).toUpperCase() + u.account_status.slice(1) : ''}</p><p className="muted">Profile: {linked ? linked.full_name : 'Not linked yet'}</p>
+        <p><button className="btn secondary small" aria-expanded={expanded} onClick={() => setExpandedUser(expanded ? null : u.id)}>{expanded ? 'Hide details' : 'Manage'}</button></p>
+        {expanded && (<div>
+        {u.id !== meUid && (<label>Role<select value={u.role} disabled={!!pending[`user-${u.id}-role`]} onChange={(e) => { const next = e.target.value; if (next === u.role) return; if (next === 'admin') setConfirmUserAction({ id: u.id, kind: 'role', body: { role: 'admin' }, label: 'Grant admin to this account? Admins can change accounts, content and settings.' }); else userAction(u.id, 'role', { role: next }, undefined, `Role changed to ${next === 'admin' ? 'Admin' : 'Team member'}.`); }}><option value="member">Team member</option><option value="admin">Admin</option></select></label>)}
+        <label>Link profile<select value={linkDraft[u.id] ?? u.member_id ?? ''} disabled={!!pending[`user-${u.id}-link`]} onChange={(e) => { const value = e.target.value; setLinkDraft({ ...linkDraft, [u.id]: value }); const next = members.find((m) => m.id === value); userAction(u.id, 'link', { member_id: value }, undefined, next ? `Profile linked to ${next.full_name}.` : 'Profile unlinked.'); }}><option value="">No profile</option>{members.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}</select></label>
+        {pending[`user-${u.id}-link`] && <p className="muted">Saving link…</p>}
+        {u.id !== meUid && u.account_status === 'invited' && <p><button className="btn secondary small" disabled={!!pending[`user-${u.id}-resend`]} onClick={() => userAction(u.id, 'resend', undefined, u.email)}>{pending[`user-${u.id}-resend`] ? 'Working…' : 'Send setup email again'}</button>{' '}<button className="btn secondary small" disabled={!!pending[`user-${u.id}-activate`]} onClick={() => userAction(u.id, 'activate', { account_status: 'active' })}>{pending[`user-${u.id}-activate`] ? 'Working…' : 'Activate'}</button>{' '}<button className="btn secondary small" disabled={!!pending[`user-${u.id}-revoke`]} onClick={() => setConfirmUserAction({ id: u.id, kind: 'revoke', label: 'Cancel this invitation? The person will not be able to use it, and their account will be deactivated.' })}>{pending[`user-${u.id}-revoke`] ? 'Working…' : 'Cancel invitation'}</button></p>}
+        {u.id !== meUid && u.account_status === 'active' && <p><button className="btn secondary small" disabled={!!pending[`user-${u.id}-deactivate`]} onClick={() => setConfirmUserAction({ id: u.id, kind: 'deactivate', body: { account_status: 'deactivated' }, label: 'Deactivate this account? They will not be able to sign in until you reactivate them.' })}>{pending[`user-${u.id}-deactivate`] ? 'Working…' : 'Deactivate'}</button></p>}
+        {u.id !== meUid && u.account_status === 'deactivated' && <p><button className="btn secondary small" disabled={!!pending[`user-${u.id}-reactivate`]} onClick={() => userAction(u.id, 'reactivate', { account_status: 'active' })}>{pending[`user-${u.id}-reactivate`] ? 'Working…' : 'Reactivate'}</button></p>}
+        {u.id === meUid ? <p className="muted">This is your account.</p> : (<><label>Set / reset password<input type="password" autoComplete="new-password" value={passwordDraft[u.id] || ''} onChange={(e) => setPasswordDraft({ ...passwordDraft, [u.id]: e.target.value })} placeholder="At least 6 characters" /></label>
+        <label>Confirm password<input type="password" autoComplete="new-password" value={passwordConfirmDraft[u.id] || ''} onChange={(e) => setPasswordConfirmDraft({ ...passwordConfirmDraft, [u.id]: e.target.value })} placeholder="Repeat the password" /></label>
+        <p><button className="btn secondary small" disabled={!!pending[`pw-${u.id}`]} onClick={() => setAccountPassword(u.id)}>{pending[`pw-${u.id}`] ? 'Setting…' : 'Set password'}</button><span className="muted"> Share it privately — it is not shown again.</span></p>
+        <p><button className="btn secondary small" onClick={() => setDeleting({ kind: 'user', id: u.id, label: u.name || u.email || u.id, text: `Delete the sign-in account for "${u.name || u.email || u.id}" permanently? They will not be able to sign in again. Their team profile, if linked, stays on the site but becomes unlinked.` })}>Delete</button></p></>)}
+        </div>)}
+      </div>); })}</div>
       {!users.length && !sectionErrors.users && <p className="muted">No accounts yet.</p>}</div>))}
 
     {tab === 'messages' && (!isAdmin ? <p className="error">Only admins can see this. If you are a team member, ask an admin.</p> : (<div>{messages.map((m) => (<div className="card" key={m.id}><strong>{m.name} ({m.email})</strong> <span className="muted">{m.read ? 'Read' : 'Unread'} · {m.created_at}</span><p>{m.subject}</p><p>{m.message}</p>
         <p><a className="btn secondary small" href={`mailto:${encodeURIComponent(m.email)}?subject=${encodeURIComponent('Re: ' + (m.subject || ''))}`}>Reply by email</a>{' '}<button className="btn secondary small" disabled={!!pending[`msg-${m.id}`]} onClick={() => messageAction(m.id, !m.read)}>{pending[`msg-${m.id}`] ? 'Working…' : (m.read ? 'Mark unread' : 'Mark read')}</button>{' '}<button className="btn secondary small" onClick={() => setDeleting({ kind: 'message', id: m.id, label: m.subject || m.name })}>Delete</button></p></div>))}
       {!messages.length && !sectionErrors.messages && <p className="muted">No messages yet.</p>}</div>))}
 
-    {tab === 'media' && (<div><h2>Uploads</h2><p className="muted">Videos count more toward the free Cloudinary quota — keep them short. Photos and resumes stay at 5 MB, videos at 50 MB.</p>
+    {tab === 'media' && (<div><h2>Uploads</h2><p className="muted">Videos count more toward the free Cloudinary quota — keep them short. Photos and resumes stay at 5 MB, videos up to 100 MB (the free Cloudinary ceiling). For videos over 40 MB, add a custom thumbnail: Cloudinary's free plan cannot always derive a first-frame thumbnail from a large video, so the card may show the play placeholder instead.</p>
       {mediaError && <p className="error">{mediaError} — uploads will not work until Cloudinary is set up in Vercel.</p>}
       <form onSubmit={upload}><h3>Upload</h3>
-        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option><option value="video">Video (MP4/WebM, max 50 MB)</option></select></label>
+        <label>File type<select value={uploadType} onChange={(e) => setUploadType(e.target.value as 'image' | 'pdf' | 'video')}><option value="image">Photo / image</option><option value="pdf">PDF resume (max 5 MB)</option><option value="video">Video (MP4/WebM, max 100 MB)</option></select></label>
         <label>File<input key={uploadKey} type="file" accept={uploadType === 'video' ? 'video/mp4,video/webm' : uploadType === 'pdf' ? 'application/pdf' : 'image/jpeg,image/png,image/webp,image/avif'} onChange={(e) => setUploadFile(e.target.files?.[0] || null)} /></label>
         <label>Title<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="e.g. Team at the tech fest" maxLength={120} /></label>
         <label>Description<textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} placeholder="A short description (optional)" maxLength={500} rows={3} /></label>
@@ -333,7 +362,7 @@ export default function AdminDashboard() {
 
     </div>
     {deleting && <ConfirmDialog text={deleting.text || `Delete "${deleting.label}"? This cannot be undone from this dialog.`} busy={deleteBusy} onCancel={() => setDeleting(null)} onConfirm={doDelete} />}
-    {confirmUserAction && <ConfirmDialog text={confirmUserAction.label} confirmLabel={confirmUserAction.kind === 'grant' || confirmUserAction.kind === 'role' ? 'Yes, change role' : confirmUserAction.kind === 'deactivate' ? 'Yes, deactivate' : confirmUserAction.kind === 'revoke' ? 'Yes, revoke' : 'Yes, confirm'} busy={!!pending[`user-${confirmUserAction.id}-${confirmUserAction.kind}`]} onCancel={() => setConfirmUserAction(null)} onConfirm={() => { const c = confirmUserAction; setConfirmUserAction(null); if (c) userAction(c.id, c.kind, c.body); }} />}
+    {confirmUserAction && <ConfirmDialog text={confirmUserAction.label} confirmLabel={confirmUserAction.kind === 'grant' || confirmUserAction.kind === 'role' ? 'Yes, change role' : confirmUserAction.kind === 'deactivate' ? 'Yes, deactivate' : confirmUserAction.kind === 'revoke' ? 'Yes, cancel invitation' : 'Yes, confirm'} busy={!!pending[`user-${confirmUserAction.id}-${confirmUserAction.kind}`]} onCancel={() => setConfirmUserAction(null)} onConfirm={() => { const c = confirmUserAction; setConfirmUserAction(null); if (c) userAction(c.id, c.kind, c.body); }} />}
     {editingMedia && (<Modal title="Edit upload details" onClose={() => setEditingMedia(null)}><form onSubmit={async (e) => { e.preventDefault(); if (!editingMedia) return; setEditMediaBusy(true); try { const r = await apiSend('/admin/media/meta', 'POST', { public_id: editingMedia.public_id, title: editMediaTitle, description: editMediaDescription }, true); if (r.error) push('error', r.error.message); else { push('success', 'Upload details saved.'); setEditingMedia(null); reload(); } } finally { setEditMediaBusy(false); } }}><p className="muted">{editingMedia.public_id}</p><label>Title<input value={editMediaTitle} onChange={(e) => setEditMediaTitle(e.target.value)} maxLength={120} /></label><label>Description<textarea value={editMediaDescription} onChange={(e) => setEditMediaDescription(e.target.value)} maxLength={500} rows={3} /></label><p className="muted">This changes the upload's title and description only — for a video, its project card keeps its own title and description (edit those in Projects).</p><p><button className="btn" disabled={editMediaBusy}>{editMediaBusy ? 'Saving…' : 'Save details'}</button>{' '}<button type="button" className="btn secondary" onClick={() => setEditingMedia(null)}>Cancel</button></p></form></Modal>)}
     <Toasts toasts={toasts} dismiss={dismiss} />
   </div>);

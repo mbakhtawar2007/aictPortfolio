@@ -312,6 +312,8 @@ test('upload verify: raw PDF with no reported format passes when id/URL ends .pd
   assert.equal(checkVerifyAsset('image', { format: 'jpg', bytes: 1000, resource_type: 'image' }, 'aict-portfolio/images/x').ok, true);
   assert.equal(checkVerifyAsset('image', { format: 'pdf', bytes: 1000, resource_type: 'image' }, 'aict-portfolio/images/x').ok, false);
   assert.equal(checkVerifyAsset('video', { format: 'mp4', bytes: 1000, resource_type: 'video' }, 'aict-portfolio/videos/x').ok, true);
+  assert.equal(checkVerifyAsset('video', { format: 'mp4', bytes: 75 * 1024 * 1024, resource_type: 'video' }, 'aict-portfolio/videos/x').ok, true, 'a 75 MB video must pass verify after the 100 MB raise');
+  assert.equal(checkVerifyAsset('video', { format: 'mp4', bytes: 101 * 1024 * 1024, resource_type: 'video' }, 'aict-portfolio/videos/x').ok, false, 'a 101 MB video must still fail verify (Cloudinary free ceiling)');
 });
 
 test('project characters: created and returned on the public project (2026-10-31)', async () => {

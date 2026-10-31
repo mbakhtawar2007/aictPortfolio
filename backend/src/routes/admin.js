@@ -101,6 +101,7 @@ adminRouter.post('/projects', requireMemberOrAdmin(async (req, res) => {
   // Audit fix 2026-10-29: member-created projects are drafts until an admin
   // publishes them (previously a member could POST status: 'published').
   if (req.actor.role === 'member') p.data.status = 'draft';
+  if (p.data.visibility === 'private') p.data.status = 'draft';
   // Audit fix 2026-10-29 (security review): a member must not attach other
   // members to a project on create — that would grant them edit rights.
   if (req.actor.role === 'member') { p.data.member_ids = req.actor.member_id ? [req.actor.member_id] : []; p.data.project_members = (p.data.project_members || []).filter((x) => x.member_id === req.actor.member_id); }
@@ -122,6 +123,7 @@ adminRouter.patch('/projects/:id', requireMemberOrAdmin(async (req, res) => {
     // list when editing an assigned project; only admins publish/unpublish
     // or change who is assigned.
     if (req.actor.role === 'member') { delete p.data.status; delete p.data.member_ids; delete p.data.project_members; }
+    if (p.data.visibility === 'private') p.data.status = 'draft';
     if (req.actor.role === 'member' && (p.data.video_url || p.data.category === 'AI Video') && !(await canUploadVideo(req.actor))) return fail(res, 403, 'forbidden', 'Only the Group Leader and admins can upload videos.');
     if (p.data.slug && await slugTaken('projects', p.data.slug, req.params.id)) return fail(res, 409, 'slug_taken', 'Another project already uses this web address (slug). Choose a different one.');
     // BUG-12: year: null on PATCH deletes the field; other omitted fields

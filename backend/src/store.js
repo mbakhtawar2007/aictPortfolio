@@ -16,6 +16,14 @@ function publicMember(m) {
   return out;
 }
 function publicProject(p) { return { ...p }; }
+// Shared member filtering for public project views (BUG-11): a published
+// project's contributor list shows only published members.
+function withPublishedMembers(p, publishedIds) {
+  const out = publicProject(p);
+  out.member_ids = (p.member_ids || []).filter((id) => publishedIds.has(id));
+  out.project_members = (p.project_members || []).filter((x) => publishedIds.has(x.member_id));
+  return out;
+}
 export const store = {
   async site() { if (isFirebase()) { const s = await db().collection('site_settings').doc('main').get(); return s.exists ? s.data() : null; } return demoStore().site; },
   async saveSite(v) { if (isFirebase()) { await db().collection('site_settings').doc('main').set(v, { merge: true }); return v; } demoStore().site = { ...demoStore().site, ...v }; return demoStore().site; },
@@ -62,17 +70,17 @@ export const store = {
   async projectsPublished() {
     const all = await this.projectsAll();
     const publishedIds = new Set((await this.membersAll()).filter((m) => m.status === 'published').map((m) => m.id));
-    // BUG-11 visibility policy: a published project stays public, but its
-    // contributor list shows only published members, so a draft member's
-    // profile is never exposed through a project.
-    return all.filter((p) => p.status === 'published').map((p) => {
-      const out = publicProject(p);
-      out.member_ids = (p.member_ids || []).filter((id) => publishedIds.has(id));
-      out.project_members = (p.project_members || []).filter((x) => publishedIds.has(x.member_id));
-      return out;
-    }).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    // Lists show public projects only: unlisted projects are reachable
+    // solely by direct link, private ones never (they are drafts anyway).
+    // A missing visibility field means public (legacy projects).
+    return all.filter((p) => p.status === 'published' && (!p.visibility || p.visibility === 'public')).map((p) => withPublishedMembers(p, publishedIds)).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   },
-  async projectBySlug(slug) { const all = await this.projectsPublished(); return all.find((p) => p.slug === slug) || null; },
+  async projectBySlug(slug) {
+    const all = await this.projectsAll();
+    const publishedIds = new Set((await this.membersAll()).filter((m) => m.status === 'published').map((m) => m.id));
+    const p = all.find((x) => x.slug === slug && x.status === 'published' && (!x.visibility || x.visibility === 'public' || x.visibility === 'unlisted'));
+    return p ? withPublishedMembers(p, publishedIds) : null;
+  },
   async saveProject(id, v) { const now = new Date().toISOString(); v = { ...v, updated_at: now, ...(id ? {} : { created_at: now }) }; if (isFirebase()) { const ref = id ? db().collection('projects').doc(id) : db().collection('projects').doc(); await ref.set({ ...v, id: ref.id }, { merge: true }); return { id: ref.id, ...v }; } const d = demoStore(); const ex = d.projects.find((p) => p.id === id); if (ex) Object.assign(ex, v); else { const row = { id: id || `project-${Date.now()}`, ...v }; d.projects.push(row); return row; } return ex; },
   async reserveSlug(kind, slug, recordId) {
     // Section 5F atomic slug reservation: a dedicated document whose id is

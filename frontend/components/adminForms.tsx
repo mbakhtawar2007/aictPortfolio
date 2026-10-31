@@ -154,7 +154,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
   const initialIds = (initial as AnyObj)?.member_ids as string[] | undefined;
   const seededMembers = (initialMembers && initialMembers.length) ? initialMembers
     : (initialIds || []).map((member_id) => ({ member_id, role_in_project: '' }));
-  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', tech_stack: [], tools_used: [], characters: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', is_leader: false, sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
+  const [f, setF] = useState<AnyObj>({ slug: '', title: '', tagline: '', description: '', case_study: '', category: 'Other', visibility: 'public', tags: [], tech_stack: [], tools_used: [], characters: [], cover_url: '', video_url: '', repo_url: '', live_url: '', year: '', featured: false, status: 'draft', is_leader: false, sort_order: 0, project_members: [], ...(initial || {}), ...(initial ? { project_members: seededMembers } : {}) });
   const [errors, setErrors] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const csv = (v: unknown) => Array.isArray(v) ? v.join(', ') : '';
@@ -181,6 +181,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
     <Text label="Characters involved (comma-separated)" value={csv(f.characters)} onChange={(v) => set('characters', v.split(',').map((s) => s.trim()).filter(Boolean))} /><p className="muted">For video projects: names of characters appearing in the video, if any. Shown on the project details page.</p>
     <Select label="Category" value={errText(f.category) || 'Other'} options={['AI Video', 'AI Tool', 'Website', 'Other']} onChange={(v) => set('category', v)} />
     <Text label="Tech stack (comma-separated)" value={csv(f.tech_stack)} onChange={(v) => set('tech_stack', v.split(',').map((s) => s.trim()).filter(Boolean))} />
+    <Text label="Tags (comma-separated)" value={csv(f.tags)} onChange={(v) => set('tags', v.split(',').map((s) => s.trim()).filter(Boolean))} /><p className="muted">Search-style keywords for the project, shown as chips on its details page.</p>
     <Text label="Tools used (comma-separated)" value={csv(f.tools_used)} onChange={(v) => set('tools_used', v.split(',').map((s) => s.trim()).filter(Boolean))} />
     <Text label="Cover URL" value={errText(f.cover_url)} onChange={(v) => set('cover_url', v)} />
     <Text label="Video URL" value={errText(f.video_url)} onChange={(v) => set('video_url', v)} />
@@ -189,6 +190,7 @@ export function ProjectForm({ initial, members, onSaved, onCancel, push, isAdmin
     <Text label="Year (leave blank to clear)" type="number" value={f.year === null || f.year === undefined ? '' : String(f.year)} onChange={(v) => set('year', v)} />
     <Check label="Featured" value={Boolean(f.featured)} onChange={(v) => set('featured', v)} /><p className="muted">Featured projects are highlighted on the homepage.</p>
     {isAdmin && <><Select label="Status" value={errText(f.status) || 'draft'} options={['draft', 'published']} onChange={(v) => set('status', v)} /><p className="muted">Draft means hidden from visitors. Published means visible on the public site.</p></>}
+    <Select label="Visibility" value={errText(f.visibility) || 'public'} options={['public', 'unlisted', 'private']} onChange={(v) => set('visibility', v)} /><p className="muted">Public appears in Projects lists. Unlisted is hidden from lists but opens from its direct link. Private stays a draft and is never public.</p>
     {!isAdmin && <p className="muted">As a member, this project is saved as a draft for an admin to review. It will not be public until an admin publishes it.</p>}
     <Text label="Sort order" type="number" value={String(f.sort_order ?? 0)} onChange={(v) => set('sort_order', v)} /><p className="muted">Lower numbers appear first in lists.</p>
     </section>

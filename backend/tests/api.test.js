@@ -371,3 +371,23 @@ test('video uploads: only Group Leader and admins (2026-10-31)', async () => {
   // Photos/resumes stay open to ordinary members.
   assert.equal((await call('POST', '/api/admin/upload/sign', MEMBER, { file_type: 'image', file_size: 10, file_name: 'x.jpg' })).status, 503);
 });
+
+test('project visibility: public listed, unlisted link-only, private forced draft; tags persist', async () => {
+  const pub = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('vis-pub'), title: 'Vis Pub', category: 'AI Video', video_url: 'https://example.com/v.mp4', visibility: 'public', status: 'published', tags: ['alpha', 'beta'] });
+  assert.equal(pub.status, 201);
+  const unl = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('vis-unl'), title: 'Vis Unl', category: 'AI Video', video_url: 'https://example.com/v.mp4', visibility: 'unlisted', status: 'published', tags: ['gamma'] });
+  assert.equal(unl.status, 201);
+  const priv = await call('POST', '/api/admin/projects', ADMIN, { slug: uid('vis-priv'), title: 'Vis Priv', category: 'AI Video', video_url: 'https://example.com/v.mp4', visibility: 'private', status: 'published' });
+  assert.equal(priv.status, 201); assert.equal(priv.json.data.status, 'draft');
+  const list = await call('GET', '/api/projects');
+  assert.ok(list.json.data.some((x) => x.slug === pub.json.data.slug));
+  assert.ok(!list.json.data.some((x) => x.slug === unl.json.data.slug));
+  assert.ok(!list.json.data.some((x) => x.slug === priv.json.data.slug));
+  const unlDetail = await call('GET', `/api/projects/${unl.json.data.slug}`);
+  assert.equal(unlDetail.status, 200); assert.deepEqual(unlDetail.json.data.tags, ['gamma']);
+  const privDetail = await call('GET', `/api/projects/${priv.json.data.slug}`);
+  assert.equal(privDetail.status, 404);
+  await call('DELETE', `/api/admin/projects/${pub.json.data.id}`, ADMIN);
+  await call('DELETE', `/api/admin/projects/${unl.json.data.id}`, ADMIN);
+  await call('DELETE', `/api/admin/projects/${priv.json.data.id}`, ADMIN);
+});

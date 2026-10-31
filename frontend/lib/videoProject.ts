@@ -31,6 +31,20 @@ export function splitCsv(v: string): string[] {
   return v.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+// Success wording for a created video project, shared by the /admin and
+// /member Uploads forms so the visibility meaning stays identical.
+export function videoProjectSuccessMessage(p: Project): string {
+  const vis = p.visibility || 'public';
+  if (p.status === 'published') {
+    return vis === 'unlisted'
+      ? `Video uploaded. Its project card is unlisted — it will not appear in Projects lists, but anyone with the direct link can open it: /projects/${p.slug}`
+      : `Video uploaded and its project card is now live on Projects: /projects/${p.slug}`;
+  }
+  return vis === 'unlisted'
+    ? 'Video uploaded and saved as a draft — an admin will publish it, and it will then be unlisted (direct link only).'
+    : 'Video uploaded and its project card is saved as a draft — an admin will publish it before it appears on Projects.';
+}
+
 export async function createVideoProject(input: {
   title: string;
   description: string;
@@ -40,6 +54,11 @@ export async function createVideoProject(input: {
   characters?: string[];
   techStack?: string[];
   memberIds?: string[];
+  category?: string;
+  visibility?: string;
+  tags?: string[];
+  year?: number;
+  coverUrl?: string;
 }): Promise<{ data: Project | null; error: string | null }> {
   const title = titleFromVideoFile(input.fileName, input.title);
   const description = (input.description || '').trim();
@@ -52,9 +71,13 @@ export async function createVideoProject(input: {
       title,
       tagline: description.slice(0, 500),
       description: description.slice(0, 10000),
-      category: 'AI Video',
+      category: input.category || 'AI Video',
       video_url: input.videoUrl,
-      cover_url: videoThumbnailUrl(input.videoUrl) || '',
+      // A custom thumbnail wins; otherwise the video's first frame is used.
+      cover_url: input.coverUrl || videoThumbnailUrl(input.videoUrl) || '',
+      visibility: input.visibility || 'public',
+      tags: (input.tags || []).map((t) => t.trim().slice(0, 100)).filter(Boolean),
+      ...(input.year !== undefined ? { year: input.year } : {}),
       // Optional details asked for in the Uploads form (2026-10-31): they
       // land on the project details page instead of its empty states.
       // Slices keep the backend's limits (case_study 20000, each
@@ -63,7 +86,8 @@ export async function createVideoProject(input: {
       characters: (input.characters || []).map((c) => c.trim().slice(0, 200)).filter(Boolean),
       tech_stack: (input.techStack || []).map((s) => s.trim()).filter(Boolean),
       // Members are forced to 'draft' by the backend; admins stay published.
-      status: 'published',
+      // Private is always a draft, even for admins (backend enforces it too).
+      status: input.visibility === 'private' ? 'draft' : 'published',
       member_ids: input.memberIds || [],
       project_members: (input.memberIds || []).map((member_id) => ({ member_id, role_in_project: '' })),
     }, true);

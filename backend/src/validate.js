@@ -49,6 +49,11 @@ export const projectSchema = z.object({
   tagline: z.string().max(500).optional().default(''), description: z.string().max(10000).optional().default(''),
   case_study: z.string().max(20000).optional().default(''),
   category: z.enum(['AI Video', 'AI Tool', 'Website', 'Other']).optional().default('Other'),
+  // Visibility (2026-10-31, YouTube-like upload form): public = in lists +
+  // detail, unlisted = detail only via direct link, private = never public
+  // (forced to draft on save). Missing = public, so legacy projects stay listed.
+  visibility: z.enum(['public', 'unlisted', 'private']).optional().default('public'),
+  tags: z.array(z.string().trim().max(100)).optional().default([]),
   tech_stack: z.array(z.string()).optional().default([]), tools_used: z.array(z.string()).optional().default([]),
   characters: z.array(z.string().trim().max(200)).optional().default([]),
   project_members: z.array(z.object({ member_id: z.string().min(1), role_in_project: z.string().optional().default('') })).optional().default([]),

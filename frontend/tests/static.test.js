@@ -267,7 +267,7 @@ test('video upload creates a project card shown in Projects (2026-10-30)', () =>
   const helper = read('lib/videoProject.ts');
   assert.match(helper, /export async function createVideoProject/);
   assert.match(helper, /\/admin\/projects/);
-  assert.match(helper, /category: 'AI Video'/);
+  assert.match(helper, /category: input.category \|\| 'AI Video'/);
   assert.match(helper, /video_url/);
   for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
     const page = read(f);
@@ -286,7 +286,7 @@ test('video project cards and details: thumbnail, storyline, characters, team (2
   assert.match(thumb, /so_0,f_jpg,w_800/, 'thumbnail is a first-frame jpg, 800px wide');
   assert.match(thumb, /cover_url \|\| videoThumbnailUrl/, 'an admin cover wins over a derived thumbnail');
   const helper = read('lib/videoProject.ts');
-  assert.match(helper, /cover_url: videoThumbnailUrl/, 'a video upload stores its thumbnail as the project cover');
+  assert.match(helper, /cover_url: input.coverUrl || videoThumbnailUrl/, 'a video upload stores its thumbnail as the project cover');
   const detail = read('app/projects/[slug]/detail.tsx');
   assert.match(detail, /poster=\{thumb/, 'the detail player uses the thumbnail as its poster');
   assert.match(detail, /Storyline &amp; plot/, 'video details show a storyline section');
@@ -367,6 +367,8 @@ test('public resume viewer goes through the signed backend proxy, not the raw Cl
   assert.ok(!/href=\{m\.resume_path\}/.test(detail), 'resume links must not point at the raw Cloudinary URL');
   const toml = read('netlify.toml');
   assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com/, 'CSP must allow framing Cloudinary for the signed redirect');
+  assert.match(toml, /object-src 'self' https:\/\/res\.cloudinary\.com https:\/\/aict-portfolio\.vercel\.app/, 'CSP object-src must allow the Vercel resume proxy origin or every <embed> is blocked');
+  assert.match(toml, /frame-src 'self' https:\/\/res\.cloudinary\.com https:\/\/aict-portfolio\.vercel\.app/, 'CSP frame-src must allow the Vercel resume proxy origin too');
 });
 
 test('public pages never show a red error box or the technical server message (2026-10-31)', () => {
@@ -391,4 +393,26 @@ test('member uploads: Video option only for the Group Leader (2026-10-31)', () =
   assert.match(member, /Video uploads are limited to the Group Leader and admins/);
   // Admin uploads stay unrestricted.
   assert.match(read('app/admin/page.tsx'), /<option value="video">Video \(MP4\/WebM, max 50 MB\)<\/option>/);
+});
+
+test('YouTube-like video upload form (2026-10-31)', () => {
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const src = read(f);
+    assert.match(src, /Custom thumbnail/);
+    assert.match(src, /Category/);
+    assert.match(src, /Tags/);
+    assert.match(src, /Visibility/);
+    assert.match(src, /value="unlisted"/);
+    assert.match(src, /value="private"/);
+    assert.match(src, /uploadDirectFile/);
+  }
+  const vp = read('lib/videoProject.ts');
+  assert.match(vp, /coverUrl/);
+  assert.match(vp, /visibility/);
+  assert.match(vp, /tags/);
+  assert.match(vp, /videoProjectSuccessMessage/);
+  const form = read('components/adminForms.tsx');
+  assert.match(form, /Tags \(comma-separated\)/);
+  assert.match(form, /Select label="Visibility"/);
+  assert.match(read('app/projects/[slug]/detail.tsx'), /Tags<\/h2>/);
 });

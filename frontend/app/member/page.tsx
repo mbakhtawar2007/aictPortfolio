@@ -1,7 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiSend } from '../../lib/api';
-import { createVideoProject, splitCsv } from '../../lib/videoProject';
+import { createVideoProject, splitCsv, videoProjectSuccessMessage } from '../../lib/videoProject';
+import { uploadDirectFile } from '../../lib/upload';
 import type { Member, Project, Achievement, MediaItem } from '../../lib/types';
 import { Loading, ErrorBox } from '../shared';
 import { Toasts, useToasts, Modal, CopyButton, ConfirmDialog } from '../../components/ui';
@@ -23,7 +24,7 @@ export default function MemberPage() {
   const [selfCreate, setSelfCreate] = useState(false);
   const [editingProject, setEditingProject] = useState<Partial<Project> | null | undefined>(undefined);
   const [editingAchievement, setEditingAchievement] = useState<Partial<Achievement> | null | undefined>(undefined);
-  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image'); const [uploadTitle, setUploadTitle] = useState(''); const [uploadDescription, setUploadDescription] = useState(''); const [uploadStoryline, setUploadStoryline] = useState(''); const [uploadCharacters, setUploadCharacters] = useState(''); const [uploadTechnology, setUploadTechnology] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null); const [uploadType, setUploadType] = useState<'image' | 'pdf' | 'video'>('image'); const [uploadTitle, setUploadTitle] = useState(''); const [uploadDescription, setUploadDescription] = useState(''); const [uploadStoryline, setUploadStoryline] = useState(''); const [uploadCharacters, setUploadCharacters] = useState(''); const [uploadTechnology, setUploadTechnology] = useState(''); const [uploadThumbFile, setUploadThumbFile] = useState<File | null>(null); const [uploadCategory, setUploadCategory] = useState('AI Video'); const [uploadVisibility, setUploadVisibility] = useState('public'); const [uploadTags, setUploadTags] = useState(''); const [uploadYear, setUploadYear] = useState('');
   const [uploadBusy, setUploadBusy] = useState(false); const [uploadUrl, setUploadUrl] = useState(''); const [uploadProgress, setUploadProgress] = useState(0); const [uploadKey, setUploadKey] = useState(0); const [showAllMedia, setShowAllMedia] = useState(false); const [deleting, setDeleting] = useState<{ kind: string; id: string; label: string } | null>(null); const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => { setToken(window.localStorage.getItem('aict_admin_token')); }, []);
@@ -57,6 +58,7 @@ export default function MemberPage() {
     if (uploadType === 'image' && !['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Images must be jpg, png, webp or avif.'); return; }
     if (uploadType === 'video' && !['mp4', 'webm'].includes(uploadFile.name.split('.').pop()?.toLowerCase() || '')) { push('error', 'Videos must be MP4 or WebM.'); return; }
     if (uploadFile.size > (uploadType === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024)) { push('error', uploadType === 'video' ? 'Video must be 50 MB or smaller.' : 'File must be 5 MB or smaller.'); return; }
+    if (uploadType === 'video' && uploadYear.trim() !== '') { const y = Number(uploadYear); if (!Number.isInteger(y) || y < 2000 || y > 2100) { push('error', 'Year must be between 2000 and 2100.'); return; } }
     setUploadBusy(true); setUploadUrl('');
     const sign = await apiSend('/admin/upload/sign', 'POST', { file_type: uploadType, file_size: uploadFile.size, file_name: uploadFile.name }, true);
     if (sign.error || !sign.data) { push('error', sign.error?.message || 'Upload signing is unavailable.'); setUploadBusy(false); return; }
@@ -66,7 +68,7 @@ export default function MemberPage() {
     const endpoint = `https://api.cloudinary.com/v1_1/${String(d.cloud_name)}/${uploadType === 'video' ? 'video' : uploadType === 'pdf' ? 'raw' : 'image'}/upload`;
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100)); };
-    xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const uploadedPublicId = String(j.public_id || d.public_id); const v = await apiSend('/admin/upload/verify', 'POST', { public_id: uploadedPublicId, file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } const meta = await apiSend('/admin/media/meta', 'POST', { public_id: uploadedPublicId, title: uploadTitle, description: uploadDescription }, true); if (meta.error) push('error', 'Upload verified, but its title could not be saved.'); const videoUrl = String((v.data as Record<string, unknown>).secure_url || j.secure_url); setUploadUrl(videoUrl); if (uploadType === 'video') { const created = await createVideoProject({ title: uploadTitle, description: uploadDescription, videoUrl, fileName: uploadFile.name, caseStudy: uploadStoryline, characters: splitCsv(uploadCharacters), techStack: splitCsv(uploadTechnology), memberIds: members[0]?.id ? [members[0].id] : [] }); if (created.data) push('success', created.data.status === 'published' ? `Video uploaded and its project card is now live on Projects: /projects/${created.data.slug}` : 'Video uploaded and its project card is saved as a draft — an admin will publish it before it appears on Projects.'); else push('error', `Video uploaded, but its project card could not be created: ${created.error} You can still create it by hand with this URL.`); } else push('success', 'Upload complete and verified by the server.'); setUploadFile(null); setUploadTitle(''); setUploadDescription(''); setUploadStoryline(''); setUploadCharacters(''); setUploadTechnology(''); setUploadKey((k) => k + 1); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
+    xhr.onload = async () => { setUploadBusy(false); try { const j = JSON.parse(xhr.responseText); if (xhr.status >= 200 && xhr.status < 300 && j.secure_url) { const uploadedPublicId = String(j.public_id || d.public_id); const v = await apiSend('/admin/upload/verify', 'POST', { public_id: uploadedPublicId, file_type: uploadType }, true); if (v.error || !v.data) { push('error', v.error?.message || 'Upload was checked by the server and rejected.'); return; } const meta = await apiSend('/admin/media/meta', 'POST', { public_id: uploadedPublicId, title: uploadTitle, description: uploadDescription }, true); if (meta.error) push('error', 'Upload verified, but its title could not be saved.'); const videoUrl = String((v.data as Record<string, unknown>).secure_url || j.secure_url); setUploadUrl(videoUrl); if (uploadType === 'video') { let coverUrl: string | undefined; if (uploadThumbFile) { try { coverUrl = await uploadDirectFile(uploadThumbFile, 'image', () => {}); } catch (err) { push('error', err instanceof Error ? err.message : 'Thumbnail upload failed.'); return; } } const created = await createVideoProject({ title: uploadTitle, description: uploadDescription, videoUrl, fileName: uploadFile.name, caseStudy: uploadStoryline, characters: splitCsv(uploadCharacters), techStack: splitCsv(uploadTechnology), memberIds: members[0]?.id ? [members[0].id] : [], category: uploadCategory, visibility: uploadVisibility, tags: splitCsv(uploadTags), year: uploadYear.trim() === '' ? undefined : Number(uploadYear), coverUrl }); if (created.data) push('success', videoProjectSuccessMessage(created.data)); else push('error', `Video uploaded, but its project card could not be created: ${created.error} You can still create it by hand with this URL.`); } else push('success', 'Upload complete and verified by the server.'); setUploadFile(null); setUploadTitle(''); setUploadDescription(''); setUploadStoryline(''); setUploadCharacters(''); setUploadTechnology(''); setUploadThumbFile(null); setUploadCategory('AI Video'); setUploadVisibility('public'); setUploadTags(''); setUploadYear(''); setUploadKey((k) => k + 1); reload(); } else push('error', j.error?.message || 'Upload failed.'); } catch { push('error', 'Upload failed.'); } };
     xhr.onerror = () => { setUploadBusy(false); push('error', 'Upload failed (network).'); };
     xhr.open('POST', endpoint); xhr.send(form);
   }
@@ -110,10 +112,25 @@ export default function MemberPage() {
         <label>Title<input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder="e.g. Team at the tech fest" maxLength={120} /></label>
         <label>Description<textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} placeholder="A short description (optional)" maxLength={500} rows={3} /></label>
         {uploadType === 'video' && (<>
+        <h3>Details</h3>
+        <label>Custom thumbnail<input key={uploadKey} type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={(e) => setUploadThumbFile(e.target.files?.[0] || null)} /></label>
+        <p className="muted">Optional — if you skip this, the video's first frame is used as the thumbnail.{uploadThumbFile ? ` Selected: ${uploadThumbFile.name}` : ''}</p>
+        <label>Category<select value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)}><option>AI Video</option><option>AI Tool</option><option>Website</option><option>Other</option></select></label>
+        <p className="muted">The site groups projects by category instead of separate playlists.</p>
+        <h3>More details</h3>
         <label>Storyline & plot<textarea value={uploadStoryline} onChange={(e) => setUploadStoryline(e.target.value)} placeholder="What happens in the video? (optional)" maxLength={20000} rows={4} /></label>
         <label>Characters involved<input value={uploadCharacters} onChange={(e) => setUploadCharacters(e.target.value)} placeholder="Comma-separated names (optional)" /></label>
         <label>Technology<input value={uploadTechnology} onChange={(e) => setUploadTechnology(e.target.value)} placeholder="Comma-separated, e.g. AI Video Tools, Premiere Pro (optional)" /></label>
-        <p className="muted">These details appear on the project's details page.</p></>)}
+        <label>Tags<input value={uploadTags} onChange={(e) => setUploadTags(e.target.value)} placeholder="Comma-separated, e.g. showreel, ai-video (optional)" /></label>
+        <label>Year<input type="number" value={uploadYear} onChange={(e) => setUploadYear(e.target.value)} placeholder="e.g. 2026 (optional)" /></label>
+        <p className="muted">These details appear on the project's details page.</p>
+        <h3>Visibility</h3>
+        <fieldset><legend>Who can watch it</legend>
+        <p><label><input type="radio" name="member-upload-visibility" value="public" checked={uploadVisibility === 'public'} onChange={() => setUploadVisibility('public')} /> <strong>Public</strong> <span className="muted">— Everyone can find it on Projects and open it.</span></label></p>
+        <p><label><input type="radio" name="member-upload-visibility" value="unlisted" checked={uploadVisibility === 'unlisted'} onChange={() => setUploadVisibility('unlisted')} /> <strong>Unlisted</strong> <span className="muted">— Hidden from Projects lists; only people with the direct link can open it.</span></label></p>
+        <p><label><input type="radio" name="member-upload-visibility" value="private" checked={uploadVisibility === 'private'} onChange={() => setUploadVisibility('private')} /> <strong>Private</strong> <span className="muted">— Hidden from everyone except admins; saved as a draft.</span></label></p>
+        </fieldset>
+        <p className="muted">As a member, your video is saved as a draft for an admin to review whatever you pick; your visibility choice applies once it is published.</p></>)}
         {uploadBusy && <p>Uploading… {uploadProgress}%</p>}
         {uploadUrl && <p className="success">Uploaded: {uploadUrl} <CopyButton text={uploadUrl} label="Copy URL" /></p>}
         <p><button className="btn" disabled={uploadBusy}>{uploadBusy ? 'Uploading…' : 'Upload'}</button></p>

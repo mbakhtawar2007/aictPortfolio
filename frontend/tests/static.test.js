@@ -715,3 +715,18 @@ test('footer compact with labels (2026-11-02: reduce height, add some text)', ()
   assert.match(css, /padding: 18px 20px 16px/, 'footer padding must be compact, not the 32/28px fuller version');
   assert.match(css, /footer \.footer-social a \{[^}]*display: inline-flex/, 'social icon + label must sit inline in one row');
 });
+
+test('detail sections use cards (2026-11-02: About, Description etc as cards)', () => {
+  const proj = read('app/projects/[slug]/detail.tsx');
+  for (const h of ['Description', 'Storyline &amp; plot', 'Case study', 'Characters involved', 'Technology', 'Tags', 'Team &amp; group members']) {
+    assert.ok(proj.includes('<h2>' + h + '</h2>'), 'project detail must keep the ' + h + ' section');
+  }
+  assert.ok((proj.match(/card detail-card/g) || []).length >= 6, 'project detail must wrap its plain sections in cards');
+  const prof = read('app/team/[slug]/detail.tsx');
+  for (const h of ['About', 'Skills &amp; Expertise', 'Resume / CV', 'Contact']) {
+    assert.ok(prof.includes('<h2>' + h + '</h2>'), 'profile detail must keep the ' + h + ' section');
+  }
+  assert.ok((prof.match(/card detail-card/g) || []).length >= 4, 'profile detail must wrap its plain sections in cards');
+  const css = read('styles/globals.css');
+  assert.match(css, /\.detail-card \{[^}]*margin-bottom: 16px/, 'detail cards must be spaced apart');
+});

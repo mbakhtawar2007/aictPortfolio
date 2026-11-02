@@ -38,7 +38,7 @@ export default function AdminDashboard() {
   // Achievements, Messages and Site settings stay hidden; their panels
   // and forms below are untouched — re-add their ids to VISIBLE_TAB_IDS
   // to bring a tab back.
-  const VISIBLE_TAB_IDS: Tab[] = ['overview', 'members', 'users', 'media', 'projects'];
+  const VISIBLE_TAB_IDS: Tab[] = ['overview', 'members', 'users', 'media', 'projects', 'messages'];
   const NAV_GROUPS_VISIBLE = NAV_GROUPS.map((g) => ({ ...g, tabs: g.tabs.filter((x) => VISIBLE_TAB_IDS.includes(x.id)) })).filter((g) => g.tabs.length);
   const allTabs = NAV_GROUPS_VISIBLE.flatMap((g) => g.tabs);
   const onTabKey = (e: React.KeyboardEvent, id: Tab) => {

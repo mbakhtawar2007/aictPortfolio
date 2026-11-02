@@ -601,7 +601,7 @@ test('Team accounts simplification + admin lazy-load (2026-10-31)', () => {
 
 test('admin nav (2026-10-31): Projects tab brought back so admins can link YouTube videos', () => {
   const admin = read('app/admin/page.tsx');
-  assert.match(admin, /VISIBLE_TAB_IDS: Tab\[\] = \['overview', 'members', 'users', 'media', 'projects'\]/, 'Projects must be a visible admin tab');
+  assert.match(admin, /VISIBLE_TAB_IDS: Tab\[\] = \['overview', 'members', 'users', 'media', 'projects', 'messages'\]/, 'Projects and Messages must be visible admin tabs (Messages returned 2026-11-02)');
   assert.match(admin, /tab === 'projects'/, 'Projects panel must exist for the tab');
 });
 
@@ -746,4 +746,20 @@ test('auto-refresh (2026-11-02): public pages refresh on return, no manual reloa
     const page = read(f);
     assert.ok(page.includes('broadcastContentUpdate()'), f + ' reload must broadcast so open public tabs refresh live');
   }
+});
+
+test('seo + messages + logo gaps (2026-11-02 gap fix)', () => {
+  const robots = read('public/robots.txt');
+  assert.match(robots, /Sitemap: https:\/\/aictportfollio\.netlify\.app\/sitemap\.xml/, 'robots.txt must point to the sitemap');
+  assert.match(robots, /Disallow: \/admin\//, 'robots.txt must keep the admin workspace out of search');
+  const gen = read('scripts/generate-sitemap.mjs');
+  assert.match(gen, /STATIC_ROUTES = \['', '\/team', '\/projects', '\/skills', '\/contact'\]/, 'sitemap must list the public routes');
+  assert.match(gen, /\/team\/\$\{s\}/, 'sitemap must include published member pages');
+  assert.match(gen, /\/projects\/\$\{s\}/, 'sitemap must include published project pages');
+  assert.ok(gen.includes('never fail') || gen.includes('still succeeds'), 'a failed API fetch must never break the build');
+  const logo = read('public/logo.svg');
+  assert.ok(logo.includes('TechHive'), 'logo must say TechHive, not AICT');
+  assert.ok(!logo.includes('>AICT<'), 'logo must not contain the old AICT wordmark');
+  const admin = read('app/admin/page.tsx');
+  assert.ok(admin.includes("'messages'"), 'Messages tab must be visible so stored contact messages are reachable');
 });

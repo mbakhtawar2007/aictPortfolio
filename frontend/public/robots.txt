@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /member/
+Disallow: /login/
+Disallow: /invite/
+
+Sitemap: https://aictportfollio.netlify.app/sitemap.xml

@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import os from 'node:os';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const any = (files, re) => files.some((f) => re.test(read(f)));
@@ -649,4 +651,21 @@ test('hydration (2026-10-31): theme/reduce toggles must not read localStorage du
 test('shorts player height (2026-10-31): tall 9:16 frame must be capped so it does not fill the screen', () => {
   const detail = read('app/projects/[slug]/detail.tsx');
   assert.match(detail, /maxWidth: p\.video_format === 'short' \? 'min\(100%, 300px, 35vh\)'/, 'shorts frame width must cap height at ~533px and ~62vh');
+});
+
+test('link preview (2026-11-02): OG image is a real 1200x630 PNG and layout declares absolute OG/Twitter tags', () => {
+  const tmp = path.join(os.tmpdir(), 'techhive-og-test.png');
+  const r = spawnSync(process.execPath, ['scripts/generate-og-image.mjs', tmp], { encoding: 'utf8' });
+  assert.equal(r.status, 0, 'og-image generator must run cleanly');
+  const buf = fs.readFileSync(tmp);
+  assert.deepEqual([...buf.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'output must be a PNG');
+  assert.equal(buf.readUInt32BE(16), 1200, 'og image width must be 1200');
+  assert.equal(buf.readUInt32BE(20), 630, 'og image height must be 630');
+  const layout = read('app/layout.tsx');
+  assert.match(layout, /metadataBase: new URL\('https:\/\/aictportfollio\.netlify\.app'\)/, 'metadataBase must make OG URLs absolute');
+  assert.match(layout, /openGraph:/, 'layout must declare openGraph tags (WhatsApp preview)');
+  assert.match(layout, /\/og-image\.png/, 'openGraph must point at the generated og image');
+  assert.match(layout, /summary_large_image/, 'twitter card must be summary_large_image');
+  const pkg = JSON.parse(read('package.json'));
+  assert.match(pkg.scripts.build, /generate-og-image\.mjs/, 'build must generate the og image first');
 });

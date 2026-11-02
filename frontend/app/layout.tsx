@@ -6,8 +6,25 @@ import SmoothScroll from '../components/SmoothScroll';
 import CosmicBackgroundLoader from '../components/Scene/CosmicBackgroundLoader';
 import TokenRefresher from '../components/TokenRefresher';
 export const metadata: Metadata = {
+  // metadataBase makes relative OG image URLs absolute — WhatsApp and
+  // other scrapers require an absolute og:image URL.
+  metadataBase: new URL('https://aictportfollio.netlify.app'),
   title: 'TechHive',
   description: 'TechHive: who we are, what we build, and what we have achieved.',
+  openGraph: {
+    title: 'TechHive',
+    description: 'TechHive: who we are, what we build, and what we have achieved.',
+    url: 'https://aictportfollio.netlify.app/',
+    siteName: 'TechHive',
+    type: 'website',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'TechHive' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'TechHive',
+    description: 'TechHive: who we are, what we build, and what we have achieved.',
+    images: ['/og-image.png'],
+  },
   icons: {
     // SVG only: the repo snapshot push cannot carry binary files, and the
     // file API stores base64 text literally, so no binary ICO/PNG is

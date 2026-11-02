@@ -99,7 +99,14 @@ label { font-size: 14px; color: var(--muted); }
 .field-error { display: block; color: var(--danger); font-size: 13px; margin: -8px 0 10px; }
 [data-theme='light'] .field-error { color: #991b1b; }
 
-footer { border-top: 1px solid var(--border); padding: 20px; text-align: center; color: var(--muted); font-size: 14px; }
+footer { border-top: 1px solid var(--border); background: var(--surface); padding: 32px 20px 28px; text-align: center; color: var(--muted); font-size: 14px; }
+footer p { margin: 8px 0; }
+.footer-brand { font-size: 20px; color: var(--text); margin-bottom: 4px; }
+.footer-subtitle { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+.footer-social { display: flex; justify-content: center; gap: 10px; margin: 12px 0; }
+.footer-social a { padding: 8px; }
+.footer-social svg { display: block; }
+.footer-social a:hover { opacity: 0.8; }
 footer a { display: inline-block; padding: 11px 6px; }
 .error { border: 1px solid #f87171; border-radius: 12px; padding: 12px; color: #fecaca; }
 [data-theme='light'] .error { color: #991b1b; }

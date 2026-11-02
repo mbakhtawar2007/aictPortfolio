@@ -692,3 +692,15 @@ test('performance (2026-11-02): Cloudinary display transforms + deferred cosmic 
   assert.match(loader, /document\.readyState === 'complete'/, 'cosmic background must wait for load before mounting');
   assert.match(loader, /setTimeout\(\(\) => setReady\(true\), 2500\)/, 'a fallback must guarantee the background eventually mounts');
 });
+
+test('footer looks full (2026-11-02 screenshot: footer looked empty)', () => {
+  const layout = read('components/layout.tsx');
+  assert.match(layout, /className="footer-brand"/, 'footer must lead with a strong brand line');
+  assert.match(layout, /Application of Information and Communication Technologies/, 'footer must carry the team subtitle');
+  assert.match(layout, /AI Video · AI Projects · Web Development · Creative Storytelling/, 'footer must list the team focus areas');
+  assert.match(layout, /className="footer-social"/, 'social icons must sit in their own row');
+  assert.match(layout, /width="30" height="30"/, 'social icons must be 30px, not the small 22px that looked lost');
+  assert.ok(!/Designed &amp; built by/.test(layout), 'creator credit line stays removed');
+  const css = read('styles/globals.css');
+  assert.match(css, /footer \{[^}]*background: var\(--surface\)/, 'footer must have a panel background so it reads as a section, not floating text');
+});

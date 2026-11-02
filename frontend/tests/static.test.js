@@ -669,3 +669,12 @@ test('link preview (2026-11-02): OG image is a real 1200x630 PNG and layout decl
   const pkg = JSON.parse(read('package.json'));
   assert.match(pkg.scripts.build, /generate-og-image\.mjs/, 'build must generate the og image first');
 });
+
+test('footer social icons (2026-11-02): GitHub + LinkedIn as SVG icons, no creator credit line', () => {
+  const layout = read('components/layout.tsx');
+  assert.match(layout, /aria-label="GitHub profile"><svg[^>]*viewBox="0 0 24 24"/, 'footer GitHub link must render an SVG icon, not plain text');
+  assert.match(layout, /aria-label="LinkedIn profile"><svg[^>]*viewBox="0 0 24 24"/, 'footer LinkedIn link must render an SVG icon, not plain text');
+  assert.match(layout, /https:\/\/github\.com\/mbakhtawar2007/, 'footer must link the creator GitHub profile');
+  assert.match(layout, /https:\/\/www\.linkedin\.com\/in\/muhammad-bakhtawar-50502b2a8/, 'footer must link the creator LinkedIn profile (from his published team profile links, not guessed)');
+  assert.ok(!/Designed &amp; built by/.test(layout), 'creator credit line was removed on user request');
+});

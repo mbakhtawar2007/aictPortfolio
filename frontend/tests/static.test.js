@@ -704,3 +704,14 @@ test('footer looks full (2026-11-02 screenshot: footer looked empty)', () => {
   const css = read('styles/globals.css');
   assert.match(css, /footer \{[^}]*background: var\(--surface\)/, 'footer must have a panel background so it reads as a section, not floating text');
 });
+
+test('footer compact with labels (2026-11-02: reduce height, add some text)', () => {
+  const layout = read('components/layout.tsx');
+  assert.match(layout, /Who we are, what we build, and what we have achieved\./, 'footer must carry the site tagline text');
+  assert.match(layout, /<span>GitHub<\/span>/, 'GitHub icon must carry a text label');
+  assert.match(layout, /<span>LinkedIn<\/span>/, 'LinkedIn icon must carry a text label');
+  assert.match(layout, /className="footer-bottom"/, 'copyright and Reduce effects must share one bottom row to save height');
+  const css = read('styles/globals.css');
+  assert.match(css, /padding: 18px 20px 16px/, 'footer padding must be compact, not the 32/28px fuller version');
+  assert.match(css, /footer \.footer-social a \{[^}]*display: inline-flex/, 'social icon + label must sit inline in one row');
+});

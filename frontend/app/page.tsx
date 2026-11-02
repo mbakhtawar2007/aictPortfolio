@@ -8,6 +8,7 @@ import ExploreStudio from '../components/ExploreStudio';
 import { scrollToSection } from '../lib/scroll3d';
 import { projectThumbnail } from '../lib/videoThumb';
 import { safeSrc } from '../lib/safeUrl';
+import { optimizedImageUrl } from '../lib/cloudinary';
 
 function Counter({ value }: { value: number }) {
   const ref = useRef<HTMLSpanElement>(null); const [n, setN] = useState(0); const started = useRef(false);
@@ -55,7 +56,7 @@ export default function Home() {
       {[['AI Video Creation', 'Short AI videos, showreels and visual stories made by the team.'], ['AI Projects', 'Practical AI tools and experiments, built and documented by members.'], ['Web Development', 'Websites and web apps, from design to a live, working product.'], ['Creative Storytelling', 'Ideas turned into stories told through video, visuals and words.']].map(([t, d]) => (<div className="card card-hover" key={t}><h3>{t}</h3><p className="muted">{d}</p></div>))}
     </div></Section>
     <Section title="Meet the Team">{membersError ? (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The team list could not be loaded. This is not an empty team.</p></div>) : (<><div className="grid">
-      {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}>{safeSrc(m.photo_url) ? <img className="avatar-img" src={safeSrc(m.photo_url)} alt="" /> : <span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}<h3><a href={`/team/${m.slug}`}>{m.full_name}</a></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
+      {members.length ? members.map((m) => (<div className="card card-hover" key={m.id}>{safeSrc(optimizedImageUrl(m.photo_url, 400)) ? <img className="avatar-img" src={safeSrc(optimizedImageUrl(m.photo_url, 400))} alt="" /> : <span className="avatar" aria-hidden="true">{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}<h3><a href={`/team/${m.slug}`}>{m.full_name}</a></h3><p className="muted">{m.role_title}</p><p>{m.short_intro}</p><p>{(m.skills || []).slice(0, 3).map((s) => <span className="chip" key={s.name}>{s.name}</span>)}</p></div>)) : <Empty text="No published team members yet." />}
     </div><p><a href="/team">See the full team →</a></p></>)}</Section>
     <Section title="Featured Projects">{projectsError ? (<div><p><button className="btn secondary" onClick={load}>Try again</button></p><p className="muted">The project list could not be loaded. This is not an empty list.</p></div>) : (<div className="grid">
       {featured.length ? featured.map((p) => { const ft = projectThumbnail(p); return (<div className="card card-hover" key={p.id}>{safeSrc(ft) && <a href={`/projects/${p.slug}`}><img className="project-thumb" src={safeSrc(ft)} alt="" loading="lazy" style={{ marginBottom: 12 }} /></a>}<h3><a href={`/projects/${p.slug}`}>{p.title}</a></h3><p>{p.tagline}</p><span className="chip">{p.category}</span>{p.video_format === 'short' && <span className="chip">Shorts</span>}</div>); }) : <Empty text="No featured projects yet." />}<p><a href="/projects">See all projects →</a></p>

@@ -248,7 +248,7 @@ test('upload: browser never sends folder separately (2026-10-30 doubled-path ver
 test('member cards show the photo when photo_url exists, initials otherwise', () => {
   for (const f of ['app/team/page.tsx', 'app/page.tsx', 'app/admin/page.tsx']) {
     const page = read(f);
-    assert.ok(page.includes("m.photo_url?.startsWith('http')") || page.includes('safeSrc(m.photo_url)'), f + ' checks photo_url (direct http check or the audit safe-URL guard)');
+    assert.ok(page.includes("m.photo_url?.startsWith('http')") || page.includes('safeSrc(m.photo_url)') || page.includes('optimizedImageUrl(m.photo_url'), f + ' checks photo_url (direct http check, the audit safe-URL guard, or the 2026-11-02 optimized URL)');
     assert.ok(page.includes('className="avatar-img"'), f + ' renders the photo in the card');
     assert.ok(page.includes('className="avatar"'), f + ' keeps the initials fallback');
   }
@@ -286,7 +286,7 @@ test('video project cards and details: thumbnail, storyline, characters, team (2
   const thumb = read('lib/videoThumb.ts');
   assert.match(thumb, /res\.cloudinary\.com/, 'thumbnails derive from Cloudinary video URLs');
   assert.match(thumb, /so_0,f_jpg,w_800/, 'thumbnail is a first-frame jpg, 800px wide');
-  assert.match(thumb, /cover_url \|\| videoThumbnailUrl/, 'an admin cover wins over a derived thumbnail');
+  assert.match(thumb, /optimizedImageUrl\(p\.cover_url, 800\) \|\| videoThumbnailUrl/, 'an admin cover (optimized, 2026-11-02) wins over a derived thumbnail');
   const helper = read('lib/videoProject.ts');
   assert.match(helper, /cover_url: input.coverUrl || videoThumbnailUrl/, 'a video upload stores its thumbnail as the project cover');
   const detail = read('app/projects/[slug]/detail.tsx');
@@ -677,4 +677,18 @@ test('footer social icons (2026-11-02): GitHub + LinkedIn as SVG icons, no creat
   assert.match(layout, /https:\/\/github\.com\/mbakhtawar2007/, 'footer must link the creator GitHub profile');
   assert.match(layout, /https:\/\/www\.linkedin\.com\/in\/muhammad-bakhtawar-50502b2a8/, 'footer must link the creator LinkedIn profile (from his published team profile links, not guessed)');
   assert.ok(!/Designed &amp; built by/.test(layout), 'creator credit line was removed on user request');
+});
+
+test('performance (2026-11-02): Cloudinary display transforms + deferred cosmic background', () => {
+  const cloud = read('lib/cloudinary.ts');
+  assert.match(cloud, /\/image\/upload\//, 'helper must target Cloudinary image delivery URLs');
+  assert.match(cloud, /f_auto,q_auto,w_/, 'helper must auto-format, auto-quality and resize');
+  assert.ok(cloud.includes("if (at === -1) return url;"), 'non-Cloudinary URLs must pass through untouched');
+  const thumb = read('lib/videoThumb.ts');
+  assert.match(thumb, /optimizedImageUrl\(p\.cover_url, 800\)/, 'project covers must use the optimized URL');
+  const home = read('app/page.tsx');
+  assert.match(home, /optimizedImageUrl\(m\.photo_url, 400\)/, 'home team avatars must use the optimized URL');
+  const loader = read('components/Scene/CosmicBackgroundLoader.tsx');
+  assert.match(loader, /document\.readyState === 'complete'/, 'cosmic background must wait for load before mounting');
+  assert.match(loader, /setTimeout\(\(\) => setReady\(true\), 2500\)/, 'a fallback must guarantee the background eventually mounts');
 });

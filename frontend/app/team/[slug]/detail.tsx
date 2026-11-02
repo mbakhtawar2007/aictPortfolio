@@ -4,6 +4,7 @@ import { apiGet, API_URL } from '../../../lib/api';
 import type { Member, Project, Achievement } from '../../../lib/types';
 import { fmtDate } from '../../shared';
 import { safeHref, safeSrc } from '../../../lib/safeUrl';
+import { optimizedImageUrl } from '../../../lib/cloudinary';
 import { CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function MemberDetail({ slug }: { slug: string }) {
   const [m, setM] = useState<Member | null>(null); const [projects, setProjects] = useState<Project[]>([]);
@@ -47,10 +48,10 @@ export default function MemberDetail({ slug }: { slug: string }) {
   const resumeUrl = `${API_URL}/members/${encodeURIComponent(m.slug)}/resume`;
   const resumeDownloadUrl = `${resumeUrl}?download=1`;
   return (<div>
-    {safeSrc(m.cover_url) ? <img className="blur-up" src={safeSrc(m.cover_url)} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 20 }} /> : null}
+    {safeSrc(m.cover_url) ? <img className="blur-up" src={safeSrc(optimizedImageUrl(m.cover_url, 1200))} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 20 }} /> : null}
     <h1>{m.full_name}{m.is_leader && <span className="chip">Group Leader</span>}</h1>
     <p className="muted">{m.role_title} {m.location ? `· ${m.location}` : ''} {m.availability ? `· ${m.availability}` : ''}</p>
-    {safeSrc(m.photo_url) ? <img className="blur-up" src={safeSrc(m.photo_url)} alt={`${m.full_name} photo`} tabIndex={0} role="button" aria-label={`Open ${m.full_name} photo`} style={{ maxWidth: 'min(320px, 100%)', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLightbox(safeSrc(m.photo_url) || null)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(safeSrc(m.photo_url) || null); } }} /> : <span className="avatar" aria-hidden="true" style={{ width: 96, height: 96, fontSize: 28 }}>{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}
+    {safeSrc(m.photo_url) ? <img className="blur-up" src={safeSrc(optimizedImageUrl(m.photo_url, 640))} alt={`${m.full_name} photo`} tabIndex={0} role="button" aria-label={`Open ${m.full_name} photo`} style={{ maxWidth: 'min(320px, 100%)', borderRadius: 20, cursor: 'pointer' }} onClick={() => setLightbox(safeSrc(m.photo_url) || null)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(safeSrc(m.photo_url) || null); } }} /> : <span className="avatar" aria-hidden="true" style={{ width: 96, height: 96, fontSize: 28 }}>{m.full_name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>}
     <h2>About</h2><p>{m.bio || m.short_intro || 'No biography published yet.'}</p>
     <h2>Skills &amp; Expertise</h2>{(m.skills || []).length ? (m.skills || []).map((s) => { const lvl = typeof s.level === 'number' ? Math.max(1, Math.min(100, s.level)) : null; return (<div key={s.name}><p>{s.name} <span className="muted">({s.category}){lvl !== null ? ` — ${lvl}%` : ''}</span></p><div className="skill-bar" role="img" aria-label={lvl !== null ? `${s.name} ${lvl} percent` : s.name}><div style={{ width: `${lvl || 0}%` }} /></div></div>); }) : <p className="muted">No skills listed yet.</p>}
     <h2>Education &amp; Experience</h2><div className="timeline">

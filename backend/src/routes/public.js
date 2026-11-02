@@ -8,6 +8,13 @@ import { authAdmin, firebaseEnabled, isDeployedEnv } from '../firebase.js';
 import { audit } from '../audit.js';
 import { demoMode } from '../firebase.js';
 export const publicRouter = express.Router();
+
+// Performance (2026-11-02): public lists/details change only when an admin
+// publishes, so a 60s browser cache + 5min stale-while-revalidate is safe
+// and stops every visit refetching. This deliberately overrides the
+// app-wide no-store (set for account data) on these routes only; admin,
+// invite, resume-redirect and health routes keep no-store.
+const publicCache = (res) => res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
 // Fail closed on a deployed backend without Firebase: the store would
 // otherwise serve in-memory SAMPLE content on public routes, and invite
 // accept would mint demo accounts. Local demo mode (not deployed) is
@@ -17,9 +24,9 @@ function deployedWithoutFirebase(res) {
   return false;
 }
 publicRouter.get('/health', (req, res) => ok(res, { status: 'ok', mode: isFirebase() ? 'firebase' : 'demo', demo: demoMode() }));
-publicRouter.get('/site', async (req, res) => { if (deployedWithoutFirebase(res)) return; try { const s = await store.site(); return ok(res, s); } catch { return fail(res, 503, 'unavailable', 'Site settings are temporarily unavailable.'); } });
-publicRouter.get('/members', async (req, res) => { if (deployedWithoutFirebase(res)) return; try { return ok(res, await store.membersPublished()); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); } });
-publicRouter.get('/members/:slug', async (req, res) => { if (deployedWithoutFirebase(res)) return; try { const m = await store.memberBySlug(req.params.slug); if (!m) return fail(res, 404, 'not_found', 'Member not found.'); return ok(res, m); } catch { return fail(res, 503, 'unavailable', 'Member is temporarily unavailable.'); } });
+publicRouter.get('/site', async (req, res) => { publicCache(res); if (deployedWithoutFirebase(res)) return; try { const s = await store.site(); return ok(res, s); } catch { return fail(res, 503, 'unavailable', 'Site settings are temporarily unavailable.'); } });
+publicRouter.get('/members', async (req, res) => { publicCache(res); if (deployedWithoutFirebase(res)) return; try { return ok(res, await store.membersPublished()); } catch { return fail(res, 503, 'unavailable', 'Members are temporarily unavailable.'); } });
+publicRouter.get('/members/:slug', async (req, res) => { publicCache(res); if (deployedWithoutFirebase(res)) return; try { const m = await store.memberBySlug(req.params.slug); if (!m) return fail(res, 404, 'not_found', 'Member not found.'); return ok(res, m); } catch { return fail(res, 503, 'unavailable', 'Member is temporarily unavailable.'); } });
 publicRouter.get('/members/:slug/resume', async (req, res) => {
   if (deployedWithoutFirebase(res)) return;
   try {
@@ -50,14 +57,14 @@ publicRouter.get('/members/:slug/resume', async (req, res) => {
     return res.redirect(signed);
   } catch { return fail(res, 503, 'unavailable', 'Resume is temporarily unavailable.'); }
 });
-publicRouter.get('/projects', async (req, res) => { if (deployedWithoutFirebase(res)) return; try { return ok(res, await store.projectsPublished()); } catch { return fail(res, 503, 'unavailable', 'Projects are temporarily unavailable.'); } });
-publicRouter.get('/projects/:slug', async (req, res) => { if (deployedWithoutFirebase(res)) return; try { const p = await store.projectBySlug(req.params.slug); if (!p) return fail(res, 404, 'not_found', 'Project not found.'); return ok(res, p); } catch { return fail(res, 503, 'unavailable', 'Project is temporarily unavailable.'); } });
-publicRouter.get('/achievements', async (req, res) => { if (deployedWithoutFirebase(res)) return; try { return ok(res, await store.achievementsPublished()); } catch { return fail(res, 503, 'unavailable', 'Achievements are temporarily unavailable.'); } });
+publicRouter.get('/projects', async (req, res) => { publicCache(res); if (deployedWithoutFirebase(res)) return; try { return ok(res, await store.projectsPublished()); } catch { return fail(res, 503, 'unavailable', 'Projects are temporarily unavailable.'); } });
+publicRouter.get('/projects/:slug', async (req, res) => { publicCache(res); if (deployedWithoutFirebase(res)) return; try { const p = await store.projectBySlug(req.params.slug); if (!p) return fail(res, 404, 'not_found', 'Project not found.'); return ok(res, p); } catch { return fail(res, 503, 'unavailable', 'Project is temporarily unavailable.'); } });
+publicRouter.get('/achievements', async (req, res) => { publicCache(res); if (deployedWithoutFirebase(res)) return; try { return ok(res, await store.achievementsPublished()); } catch { return fail(res, 503, 'unavailable', 'Achievements are temporarily unavailable.'); } });
 function cleanGalleryTitle(name) {
   const base = String(name || '').replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   return base ? base.slice(0, 80) : '';
 }
-publicRouter.get('/gallery', async (req, res) => {
+publicRouter.get('/gallery', async (req, res) => { publicCache(res);
   if (deployedWithoutFirebase(res)) return;
   // Public gallery: photos and videos only. Resumes are never listed here.
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;

@@ -59,6 +59,8 @@ export function youtubeEmbedUrl(videoUrl?: string): string | null {
   return id ? `https://www.youtube.com/embed/${id}?rel=0` : null;
 }
 
+import { optimizedImageUrl } from './cloudinary';
+
 export function projectThumbnail(p: Project): string | null {
-  return p.cover_url || videoThumbnailUrl(p.video_url) || youtubeThumbnailUrl(p.video_url) || null;
+  return optimizedImageUrl(p.cover_url, 800) || videoThumbnailUrl(p.video_url) || youtubeThumbnailUrl(p.video_url) || null;
 }

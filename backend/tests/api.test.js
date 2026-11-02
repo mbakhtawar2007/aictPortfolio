@@ -34,6 +34,15 @@ async function call(method, path, token, body) {
 const ADMIN = 'demo-admin-token'; const MEMBER = 'demo-member-token'; const UNLINKED = 'demo-unlinked-token';
 const uid = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+test('public cache (2026-11-02): public lists cache 60s, health keeps no-store', async () => {
+  const m = await fetch(base + '/api/members');
+  assert.equal(m.status, 200);
+  const cc = m.headers.get('cache-control') || '';
+  assert.ok(cc.includes('max-age=60'), 'public members list must be cacheable for 60s, got: ' + cc);
+  assert.ok(!cc.includes('no-store'), 'public list must NOT be no-store');
+  const h = await fetch(base + '/api/health');
+  assert.ok((h.headers.get('cache-control') || '').includes('no-store'), 'health (and by extension admin/account routes) must keep no-store');
+});
 test('public: health, published-only lists, missing detail 404', async () => {
   const h = await call('GET', '/api/health'); assert.equal(h.status, 200); assert.equal(h.json.data.demo, true);
   const m = await call('GET', '/api/members'); assert.equal(m.status, 200);

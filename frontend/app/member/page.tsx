@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiSend, authToken } from '../../lib/api';
+import { broadcastContentUpdate } from '../../lib/useAutoRefresh';
 import { signOutSession } from '../../lib/session';
 import { createVideoProject, splitCsv, videoProjectSuccessMessage } from '../../lib/videoProject';
 import { uploadDirectFile } from '../../lib/upload';
@@ -30,7 +31,7 @@ export default function MemberPage() {
 
   useEffect(() => { setToken(authToken()); }, []);
   const reload = useCallback(async () => {
-    setGateError(''); setSectionErrors({});
+    setGateError(''); setSectionErrors({}); broadcastContentUpdate();
     const me = await apiGet<{ role: string }>('/admin/me', true);
     if (me.data?.role === 'admin') { window.location.href = '/admin'; return; }
     if (me.error) {

@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiGet } from '../../../lib/api';
 import { safeHref, safeSrc } from '../../../lib/safeUrl';
 import { optimizedImageUrl } from '../../../lib/cloudinary';
+import { useAutoRefresh } from '../../../lib/useAutoRefresh';
 import type { Project, Member } from '../../../lib/types';
 import { SkeletonGrid, Lightbox } from '../../../components/ui';
 import { projectThumbnail, youtubeEmbedUrl } from '../../../lib/videoThumb';
@@ -11,8 +12,8 @@ export default function ProjectDetail({ slug }: { slug: string }) {
   const [all, setAll] = useState<Project[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
   const [lb, setLb] = useState<number | null>(null);
   const gallery = [safeSrc(p?.cover_url)].filter(Boolean) as string[];
-  useEffect(() => {
-    (async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
       // Same URL-slug rule as the member detail page: a Netlify rewrite
       // may serve a pre-rendered file for a new slug, so read the slug
       // from the actual URL. This makes a newly published project work
@@ -20,15 +21,16 @@ export default function ProjectDetail({ slug }: { slug: string }) {
       let actualSlug = slug;
       if (typeof window !== 'undefined') {
         try { actualSlug = decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || slug); }
-        catch { setError('Project not found.'); setLoading(false); return; }
+        catch { if (!silent) { setError('Project not found.'); setLoading(false); } return; }
       }
       const [r, m, a] = await Promise.all([apiGet<Project>(`/projects/${encodeURIComponent(actualSlug)}`), apiGet<Member[]>('/members'), apiGet<Project[]>('/projects')]);
       const project = (!r.error && r.data) ? r.data : null;
-      if (!project) setError(r.error ? r.error.message : 'Project not found.'); else { setP(project); document.title = `${project.title} | TechHive`; }
-      setMembers(m.data || []); setAll(a.data || []);
-      setLoading(false);
-    })();
+      if (!project) { if (!silent) setError(r.error ? r.error.message : 'Project not found.'); } else { setP(project); document.title = `${project.title} | TechHive`; }
+      if (!m.error) setMembers(m.data || []); if (!a.error) setAll(a.data || []);
+    if (!silent) setLoading(false);
   }, [slug]);
+  useEffect(() => { load(); }, [load]);
+  useAutoRefresh(() => load(true));
   useEffect(() => {
     if (lb === null) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLb(null); if (e.key === 'ArrowRight' && gallery.length) setLb((v) => ((v ?? 0) + 1) % gallery.length); if (e.key === 'ArrowLeft' && gallery.length) setLb((v) => ((v ?? 0) - 1 + gallery.length) % gallery.length); };

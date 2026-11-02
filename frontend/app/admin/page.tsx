@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiSend, authToken } from '../../lib/api';
+import { broadcastContentUpdate } from '../../lib/useAutoRefresh';
 import { signOutSession } from '../../lib/session';
 import { createVideoProject, splitCsv, videoProjectSuccessMessage } from '../../lib/videoProject';
 import { uploadDirectFile } from '../../lib/upload';
@@ -75,7 +76,7 @@ export default function AdminDashboard() {
   // settings, history) is fetched on demand when its tab is opened, instead of on every load.
   const [loadedSections, setLoadedSections] = useState<Record<string, boolean>>({});
   const reload = useCallback(async (coreOnly?: boolean) => {
-    setGateError(''); setSectionErrors({});
+    setGateError(''); setSectionErrors({}); broadcastContentUpdate();
     // Members do not see this page at all — send them to their own page.
     // A network/backend failure on /admin/me is NOT a logout: show a
     // retryable gate error instead of redirecting or falsely gating tabs.

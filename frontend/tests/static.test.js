@@ -730,3 +730,20 @@ test('detail sections use cards (2026-11-02: About, Description etc as cards)', 
   const css = read('styles/globals.css');
   assert.match(css, /\.detail-card \{[^}]*margin-bottom: 16px/, 'detail cards must be spaced apart');
 });
+
+test('auto-refresh (2026-11-02): public pages refresh on return, no manual reload', () => {
+  const hook = read('lib/useAutoRefresh.ts');
+  assert.match(hook, /visibilitychange/, 'hook must refresh when the tab becomes visible again');
+  assert.match(hook, /window\.addEventListener\('focus'/, 'hook must refresh when the window regains focus');
+  assert.match(hook, /CONTENT_UPDATED_KEY/, 'hook must listen for content-change broadcasts from other tabs');
+  assert.match(hook, /10000/, 'refetches must be throttled so focus+visibility firing together does not double-fetch');
+  for (const f of ['app/page.tsx', 'app/team/page.tsx', 'app/projects/page.tsx', 'app/skills/page.tsx', 'app/team/[slug]/detail.tsx', 'app/projects/[slug]/detail.tsx']) {
+    const page = read(f);
+    assert.ok(page.includes('useAutoRefresh(() => load(true))'), f + ' must auto-refresh with a silent load');
+    assert.ok(page.includes('silent = false'), f + ' load must support a silent mode (no skeleton flash, no error overwrite)');
+  }
+  for (const f of ['app/admin/page.tsx', 'app/member/page.tsx']) {
+    const page = read(f);
+    assert.ok(page.includes('broadcastContentUpdate()'), f + ' reload must broadcast so open public tabs refresh live');
+  }
+});

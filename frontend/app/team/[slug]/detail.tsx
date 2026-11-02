@@ -1,18 +1,19 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiGet, API_URL } from '../../../lib/api';
 import type { Member, Project, Achievement } from '../../../lib/types';
 import { fmtDate } from '../../shared';
 import { safeHref, safeSrc } from '../../../lib/safeUrl';
 import { optimizedImageUrl } from '../../../lib/cloudinary';
+import { useAutoRefresh } from '../../../lib/useAutoRefresh';
 import { CopyButton, SkeletonGrid, Lightbox } from '../../../components/ui';
 export default function MemberDetail({ slug }: { slug: string }) {
   const [m, setM] = useState<Member | null>(null); const [projects, setProjects] = useState<Project[]>([]);
   const [allMembers, setAllMembers] = useState<Member[]>([]); const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [secondaryError, setSecondaryError] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
-  useEffect(() => {
-    (async () => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
       // Read the slug from the actual URL, not only from the baked-in
       // build-time prop. Netlify rewrites an unknown /team/<slug> to a
       // pre-rendered detail file, so the prop would otherwise be the
@@ -23,23 +24,24 @@ export default function MemberDetail({ slug }: { slug: string }) {
       let actualSlug = slug;
       if (typeof window !== 'undefined') {
         try { actualSlug = decodeURIComponent(window.location.pathname.split('/').filter(Boolean).pop() || slug); }
-        catch { setError('Member not found.'); setLoading(false); return; }
+        catch { if (!silent) { setError('Member not found.'); setLoading(false); } return; }
       }
       const [r, p, ms, a] = await Promise.all([apiGet<Member>(`/members/${encodeURIComponent(actualSlug)}`), apiGet<Project[]>('/projects'), apiGet<Member[]>('/members'), apiGet<Achievement[]>('/achievements')]);
       const member = (!r.error && r.data) ? r.data : null;
-      if (!member) setError(r.error ? r.error.message : 'Member not found.'); else setM(member);
+      if (!member) { if (!silent) setError(r.error ? r.error.message : 'Member not found.'); } else setM(member);
       // Secondary fetches are tracked separately: a failed projects or
       // achievements fetch must not masquerade as an empty list.
-      setSecondaryError(Boolean(p.error || ms.error || a.error));
+      if (!silent) setSecondaryError(Boolean(p.error || ms.error || a.error));
       const effProjects = p.data || [];
       const effMembers = ms.data || [];
       const effAchievements = a.data || [];
       if (member) document.title = `${member.full_name} | TechHive`;
-      setProjects(effProjects.filter((x) => (x.member_ids || []).includes(member?.id || '')));
-      setAllMembers(effMembers); setAchievements(effAchievements.filter((x) => x.member_id === member?.id));
-      setLoading(false);
-    })();
+      if (!p.error) setProjects(effProjects.filter((x) => (x.member_ids || []).includes(member?.id || '')));
+      if (!ms.error) setAllMembers(effMembers); if (!a.error) setAchievements(effAchievements.filter((x) => x.member_id === member?.id));
+    if (!silent) setLoading(false);
   }, [slug]);
+  useEffect(() => { load(); }, [load]);
+  useAutoRefresh(() => load(true));
   if (loading) return <SkeletonGrid />;
   if (error || !m) return (<div><p className="muted">{/not found/i.test(error) || !error ? 'Member not found.' : 'This profile could not be loaded right now.'}</p><p><a href="/team">← Back to team</a></p></div>);
   const idx = allMembers.findIndex((x) => x.id === m.id);

@@ -772,3 +772,10 @@ test('skill level can never be 0 (2026-11-02 mobile skill fix)', () => {
   const detail = read('app/team/[slug]/detail.tsx');
   assert.ok(detail.includes('Number.isFinite(s.level) ? Math.max(1, Math.min(100, s.level)) : 50'), 'profile bar must fall back to the 50 default, never render 0%');
 });
+
+test('reduced-motion background is a finished static nebula, not a flat t=0 frame (2026-11-02)', () => {
+  const scene = read('components/Scene/CosmicBackground.tsx');
+  assert.ok(scene.includes('const t = reduced ? 20 : time.current'), 'reduced mode must pin time to a developed drift value');
+  assert.ok(scene.includes('reduced ? 0.5 : scrollProgress.value'), 'reduced mode must pin scroll to the mid blended palette, not blue-only 0');
+  assert.ok(scene.includes("frameloop={reduced ? 'never' : 'always'}"), 'reduced mode must still freeze the frame loop');
+});

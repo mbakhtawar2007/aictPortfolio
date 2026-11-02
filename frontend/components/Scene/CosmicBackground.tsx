@@ -323,9 +323,14 @@ function CosmicScene({ reduced, mobile, light }: { reduced: boolean; mobile: boo
 
   useFrame((_, delta) => {
     if (!reduced && !document.hidden) time.current += delta;
-    const t = time.current;
+    // Reduced motion: the frame loop is frozen (frameloop 'never'), so the
+    // single static frame must already look finished. A frozen t=0/uScroll=0
+    // frame is a flat blue field, which reads as 'no background'. Pin the
+    // static frame to developed drift (t=20) and the mid blended palette
+    // (uScroll=0.5) — colourful but motionless, as reduced motion intends.
+    const t = reduced ? 20 : time.current;
     nebulaMaterial.uniforms.uTime.value = t;
-    nebulaMaterial.uniforms.uScroll.value = reduced ? 0 : scrollProgress.value;
+    nebulaMaterial.uniforms.uScroll.value = reduced ? 0.5 : scrollProgress.value;
     starMaterial.uniforms.uTime.value = t;
     smoothMouse.current.x = MathUtils.damp(
       smoothMouse.current.x,

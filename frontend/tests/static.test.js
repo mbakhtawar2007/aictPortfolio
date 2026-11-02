@@ -763,3 +763,12 @@ test('seo + messages + logo gaps (2026-11-02 gap fix)', () => {
   const admin = read('app/admin/page.tsx');
   assert.ok(admin.includes("'messages'"), 'Messages tab must be visible so stored contact messages are reachable');
 });
+
+test('skill level can never be 0 (2026-11-02 mobile skill fix)', () => {
+  const forms = read('components/adminForms.tsx');
+  assert.ok(forms.includes("blank={{ level: 50 }}"), 'new skill rows must start with a real level 50');
+  assert.ok(forms.includes('Number.isFinite(sk.level) ? Math.max(1, Math.min(100, sk.level)) : 50'), 'saved skills must default a missing/invalid level to 50, never 0');
+  assert.ok(forms.includes('inputMode="numeric"'), 'level input must open a numeric keyboard on mobile');
+  const detail = read('app/team/[slug]/detail.tsx');
+  assert.ok(detail.includes('Number.isFinite(s.level) ? Math.max(1, Math.min(100, s.level)) : 50'), 'profile bar must fall back to the 50 default, never render 0%');
+});

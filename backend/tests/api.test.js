@@ -531,3 +531,15 @@ test('audit: CORS origins are normalised (no trailing slash, no wildcard) and ba
   const res = await fetch(base + '/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' });
   assert.equal(res.status, 400);
 });
+
+test('skill level never 0 (2026-11-02 mobile skill fix): PATCH without a level stores 50', async () => {
+  const orig = [{ name: 'Video Editing', category: 'Creative', level: 80 }, { name: 'React', category: 'Technical', level: 70 }];
+  const r = await call('PATCH', '/api/admin/members/sample-member-1', ADMIN, { skills: [{ name: 'NoLevelSkill', category: 'Technical' }, { name: 'KeptSkill', category: 'Technical', level: 80 }] });
+  assert.equal(r.status, 200);
+  const got = r.json.skills || r.json.data?.skills || [];
+  const noLevel = got.find((x) => x.name === 'NoLevelSkill');
+  assert.ok(noLevel, 'patched skill must be stored');
+  assert.equal(noLevel.level, 50, 'a skill saved without a level must store 50, never 0/missing');
+  assert.equal(got.find((x) => x.name === 'KeptSkill').level, 80, 'an explicit level must survive unchanged');
+  await call('PATCH', '/api/admin/members/sample-member-1', ADMIN, { skills: orig });
+});

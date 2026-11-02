@@ -72,6 +72,9 @@ adminRouter.patch('/members/:id', requireMemberOrAdmin(async (req, res) => {
   if (req.actor.role === 'member' && !canEditMember(req.actor, req.params.id)) return fail(res, 404, 'not_found', 'Member not found.');
   if (!canEditMember(req.actor, req.params.id)) return fail(res, 403, 'forbidden', 'You can edit only your own profile.');
   const p = parseBody(memberSchema.partial(), req.body); if (!p.ok) return fail(res, 400, 'validation_error', p.message);
+  // Skill levels must never be 0 or missing: a row saved without a level
+  // rendered as a 0% bar. Normalize server-side so no client can store one.
+  if (Array.isArray(p.data.skills)) p.data.skills = p.data.skills.map((sk) => ({ ...sk, level: typeof sk.level === 'number' && Number.isFinite(sk.level) ? Math.max(1, Math.min(100, sk.level)) : 50 }));
   // Audit fix 2026-10-29: members must never publish themselves. POST already
   // forces self-created profiles to draft, but PATCH let a member flip an
   // existing draft to published and bypass admin review. Preserve the

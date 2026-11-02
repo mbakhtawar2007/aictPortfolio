@@ -9,8 +9,8 @@ import { Field } from './ui';
 type AnyObj = Record<string, unknown>;
 function errText(v: unknown): string { return typeof v === 'string' ? v : ''; }
 function slugify(v: string): string { return v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
-function Text({ label, value, onChange, type = 'text', error, placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; error?: string; placeholder?: string }) {
-  return (<Field label={label} error={error}><input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></Field>);
+function Text({ label, value, onChange, type = 'text', error, placeholder, inputMode, min, max }: { label: string; value: string; onChange: (v: string) => void; type?: string; error?: string; placeholder?: string; inputMode?: 'numeric' | 'text'; min?: number; max?: number }) {
+  return (<Field label={label} error={error}><input type={type} value={value} placeholder={placeholder} inputMode={inputMode} min={min} max={max} onChange={(e) => onChange(e.target.value)} /></Field>);
 }
 function Area({ label, value, onChange, rows = 4, error }: { label: string; value: string; onChange: (v: string) => void; rows?: number; error?: string }) {
   return (<Field label={label} error={error}><textarea rows={rows} value={value} onChange={(e) => onChange(e.target.value)} /></Field>);
@@ -21,11 +21,11 @@ function Check({ label, value, onChange }: { label: string; value: boolean; onCh
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
   return (<Field label={label}><select value={value} onChange={(e) => onChange(e.target.value)}>{options.map((o) => <option key={o} value={o}>{o}</option>)}</select></Field>);
 }
-function ListEditor({ title, items, onChange, render }: { title: string; items: AnyObj[]; onChange: (items: AnyObj[]) => void; render: (item: AnyObj, set: (patch: AnyObj) => void, index: number) => React.ReactNode }) {
+function ListEditor({ title, items, onChange, render, blank }: { title: string; items: AnyObj[]; onChange: (items: AnyObj[]) => void; render: (item: AnyObj, set: (patch: AnyObj) => void, index: number) => React.ReactNode; blank?: AnyObj }) {
   const setItem = (i: number, patch: AnyObj) => onChange(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   return (<div><h3>{title}</h3>
     {items.map((it, i) => (<div className="card" key={i}>{render(it, (patch) => setItem(i, patch), i)}<button type="button" className="btn secondary small" onClick={() => onChange(items.filter((_, j) => j !== i))}>Remove</button></div>))}
-    <p><button type="button" className="btn secondary small" onClick={() => onChange([...items, {}])}>+ Add</button></p></div>);
+    <p><button type="button" className="btn secondary small" onClick={() => onChange([...items, { ...(blank || {}) }])}>+ Add</button></p></div>);
 }
 async function saveForm(path: string, method: string, body: unknown, push: (k: 'success' | 'error', t: string) => void, onSaved: () => void, setBusy: (b: boolean) => void) {
   setBusy(true);
@@ -72,7 +72,7 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     if (!errText(f.full_name).trim()) errs.full_name = 'Full name is required.';
     if (f.contact_email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(errText(f.contact_email))) errs.contact_email = 'Enter a valid email, or leave it blank.';
     setErrors(errs); if (Object.keys(errs).length) return;
-    const body = { ...f, slug, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name).map((sk) => ({ ...sk, level: typeof sk.level === 'number' ? Math.max(1, Math.min(100, sk.level)) : sk.level })), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
+    const body = { ...f, slug, sort_order: Number(f.sort_order) || 0, skills: (f.skills as AnyObj[]).filter((s) => s.name).map((sk) => ({ ...sk, level: typeof sk.level === 'number' && Number.isFinite(sk.level) ? Math.max(1, Math.min(100, sk.level)) : 50 })), education: (f.education as AnyObj[]).filter((s) => s.institution), experience: (f.experience as AnyObj[]).filter((s) => s.organization), links: (f.links as AnyObj[]).filter((s) => s.url) };
     delete (body as AnyObj).id;
     if (!canSetLeader) { delete (body as AnyObj).status; delete (body as AnyObj).is_leader; }
     await saveForm(initial?.id ? `/admin/members/${initial.id}` : '/admin/members', initial?.id ? 'PATCH' : 'POST', body, push, onSaved, setBusy);
@@ -121,10 +121,10 @@ export function MemberForm({ initial, onSaved, onCancel, push, selfCreate, canSe
     <Text label="Location" value={errText(f.location)} onChange={(v) => set('location', v)} />
     <Text label="Availability" value={errText(f.availability)} onChange={(v) => set('availability', v)} placeholder="e.g. Open to internships" /></section>
     <section className="form-section"><h3>Skills, education, experience & links</h3><p className="muted">Add as many as you like. Empty rows are ignored when you save.</p>
-    <ListEditor title="Skills" items={(f.skills as AnyObj[]) || []} onChange={(v) => set('skills', v)} render={(it, setIt) => (<>
+    <ListEditor title="Skills" blank={{ level: 50 }} items={(f.skills as AnyObj[]) || []} onChange={(v) => set('skills', v)} render={(it, setIt) => (<>
       <Text label="Skill name" value={errText(it.name)} onChange={(v) => setIt({ name: v })} />
       <Text label="Category" value={errText(it.category) || 'Technical'} onChange={(v) => setIt({ category: v })} />
-      <Text label="Level 1–100" type="number" value={String(it.level ?? 50)} onChange={(v) => setIt({ level: Math.max(1, Math.min(100, Number(v) || 50)) })} /></>)} />
+      <Text label="Level 1–100" type="number" inputMode="numeric" min={1} max={100} value={String(it.level ?? 50)} onChange={(v) => setIt({ level: Math.max(1, Math.min(100, Number(v) || 50)) })} /></>)} />
     <ListEditor title="Education" items={(f.education as AnyObj[]) || []} onChange={(v) => set('education', v)} render={(it, setIt) => (<>
       <Text label="Institution" value={errText(it.institution)} onChange={(v) => setIt({ institution: v })} />
       <Text label="Degree" value={errText(it.degree)} onChange={(v) => setIt({ degree: v })} />

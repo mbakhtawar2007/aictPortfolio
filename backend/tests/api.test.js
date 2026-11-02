@@ -109,6 +109,13 @@ test('project year: set, clear via null, other fields preserved, no resurrection
   const again = await call('PATCH', `/api/admin/projects/${proj.json.data.id}`, ADMIN, { title: 'Year 2' });
   assert.ok(!('year' in again.json.data));
 });
+test('contact: valid message stores successfully with no notification service configured (2026-11-02)', async () => {
+  const res = await call('POST', '/api/contact', null, { name: 'Store Check', email: 'store-check@x.com', message: 'does storage work without email configured?' });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.data.received, true);
+  assert.equal(typeof res.json.data.id, 'string');
+});
+
 test('contact: validation, honeypot silent accept, rate limit 429', async () => {
   assert.equal((await call('POST', '/api/contact', null, { name: 'T', email: 'bad', message: 'hi' })).status, 400);
   const honey = await call('POST', '/api/contact', null, { name: 'Bot', email: 'bot@x.com', message: 'spam', website: 'http://spam' });

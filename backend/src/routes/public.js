@@ -102,9 +102,18 @@ publicRouter.post('/contact', async (req, res) => {
   if (!(await contactAllowedForRequest(req))) return fail(res, 429, 'rate_limited', 'Too many messages. Please try again later.');
   try {
     const msg = await store.addMessage({ name: body.name, email: body.email, subject: body.subject, message: body.message, created_at: new Date().toISOString(), read: false });
-    // Resend is optional. A mail failure must not expose the key or fail the stored message.
+    // Notification is best-effort only: a mail failure must not expose a
+    // key or fail the stored message. Gmail first — it is already
+    // configured for invite emails, so contact mail needs no new
+    // third-party account — Resend second. Recipient: CONTACT_NOTIFY_EMAIL
+    // when set, otherwise the Gmail account itself (the admin's mailbox).
+    const notifyTo = process.env.CONTACT_NOTIFY_EMAIL || process.env.GMAIL_USER || '';
     try {
-      if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
+      if (notifyTo && process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+        const nodemailer = (await import('nodemailer')).default;
+        const transporter = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
+        await transporter.sendMail({ from: `"TechHive" <${process.env.GMAIL_USER}>`, to: notifyTo, replyTo: body.email, subject: `Portfolio contact: ${oneLine(body.subject) || 'New message'}`, text: `From ${oneLine(body.name)} <${body.email}>\n\n${body.message}` });
+      } else if (process.env.RESEND_API_KEY && process.env.CONTACT_NOTIFY_EMAIL) {
         const { Resend } = await import('resend');
         await new Resend(process.env.RESEND_API_KEY).emails.send({ from: 'TechHive <onboarding@resend.dev>', to: process.env.CONTACT_NOTIFY_EMAIL, subject: `Portfolio contact: ${oneLine(body.subject) || 'New message'}`, text: `From ${oneLine(body.name)} <${body.email}>\n\n${body.message}` });
       }
